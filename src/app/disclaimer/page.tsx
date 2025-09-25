@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "利用上の注意・免責事項 | 個人情報検索アプリ",
+  title: "利用上の注意・免責事項 | WhoisP",
 };
 
 export default function DisclaimerPage() {

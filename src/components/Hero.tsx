@@ -12,7 +12,7 @@ export default function Hero() {
       />
       <div className="relative p-8 md:p-12">
         <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
-          個人情報検索アプリ
+          WhoisP（フーイズピー）
         </h1>
         <p className="mt-3 text-muted-foreground max-w-2xl">
           氏名・会社名・役職から、WebやSNS上の公開情報を素早く横断検索。調査・本人確認・セルフチェックに。

@@ -12,7 +12,7 @@ export default function HeroEn() {
       />
       <div className="relative p-8 md:p-12">
         <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
-          Persona Finder
+          WhoisP
         </h1>
         <p className="mt-3 text-muted-foreground max-w-2xl">
           Cross-search public information on the web and social networks by full name, company, and position — for research, verification, and self-checks.

@@ -12,7 +12,7 @@ export const ProjectHeader: React.FC<{ id: string; lang: Lang }>
 
   React.useEffect(() => {
     try {
-      const raw = localStorage.getItem("pf_projects");
+      const raw = localStorage.getItem("whoisp_projects");
       if (!raw) return;
       const list: Project[] = JSON.parse(raw);
       const found = list.find((p) => p.id === id) || null;
