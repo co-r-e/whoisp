@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+
+import {
+  type HistoryLocale,
+  useHistoryContext,
+} from "./history-context";
 
 type Locale = "en" | "ja";
 
@@ -70,6 +76,7 @@ type UiStrings = {
 type DeepResearchClientProps = {
   locale: Locale;
   strings: UiStrings;
+  sessionId?: string;
 };
 
 type ResearchState = {
@@ -86,7 +93,7 @@ const initialState: ResearchState = {
   sources: [],
 };
 
-export function DeepResearchClient({ locale, strings }: DeepResearchClientProps) {
+export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchClientProps) {
   const [query, setQuery] = useState("");
   const [state, setState] = useState(initialState);
   const [status, setStatus] = useState<string>(strings.idleStatus);
@@ -94,6 +101,22 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
   const [error, setError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const pathname = usePathname();
+  const { ensureSession, touchSession, renameIfUntitled, getDefaultTitle } = useHistoryContext();
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const historyLocale = locale as HistoryLocale;
+    ensureSession({
+      id: sessionId,
+      title: getDefaultTitle(historyLocale),
+      path: pathname,
+      locale: historyLocale,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    touchSession(sessionId);
+  }, [ensureSession, getDefaultTitle, locale, pathname, sessionId, touchSession]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -207,6 +230,11 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
       setError(null);
       setState(initialState);
 
+      if (sessionId) {
+        renameIfUntitled(sessionId, currentQuery);
+        touchSession(sessionId);
+      }
+
       try {
         const response = await fetch("/api/deep-research", {
           method: "POST",
@@ -239,7 +267,7 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
         setStatus(strings.idleStatus);
       }
     },
-    [consumeStream, locale, strings.idleStatus, strings.runningStatus],
+    [consumeStream, locale, renameIfUntitled, sessionId, strings.idleStatus, strings.runningStatus, touchSession],
   );
 
   const handleSubmit = useCallback(
@@ -260,8 +288,6 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
   return (
     <div className="w-full px-4 pt-8 pb-12 md:px-6 md:pt-10 md:pb-16 flex flex-col gap-12">
       <section className="mx-auto w-full max-w-5xl space-y-4">
-        <h1 className="text-3xl font-semibold">{strings.title}</h1>
-        <p className="text-base leading-relaxed text-muted-foreground">{strings.lead}</p>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <label className="text-sm font-medium" htmlFor="query">
             {strings.queryLabel}

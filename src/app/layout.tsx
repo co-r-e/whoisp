@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
+import Sidebar from "./_components/sidebar";
+import { HistoryProvider } from "./_components/history-context";
 
 export const metadata: Metadata = {
   title: "WhoisP",
@@ -20,26 +21,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-background text-foreground antialiased">
-        <div className="flex min-h-screen flex-col">
-          <header className="border-b border-border">
-            <nav className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4 text-sm">
-              <Link href="/" className="text-base font-semibold tracking-tight">
-                WhoisP
-              </Link>
-              <div className="flex items-center gap-4">
-                <Link href="/disclaimer" className="underline underline-offset-4">
-                  Usage notes
-                </Link>
-                <Link href="/ja" className="underline underline-offset-4">
-                  日本語
-                </Link>
-              </div>
-            </nav>
-          </header>
-          <main className="flex-1">
-            {children}
-          </main>
-        </div>
+        <HistoryProvider>
+          <div className="flex min-h-screen">
+            <Sidebar />
+            <div className="flex min-h-screen flex-1 flex-col pl-72">
+              <main className="flex-1 px-4 py-6 md:px-8">
+                {children}
+              </main>
+            </div>
+          </div>
+        </HistoryProvider>
       </body>
     </html>
   );
