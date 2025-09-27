@@ -15,15 +15,23 @@ npm install
 
 ## Environment Variables
 
-Create a `.env.local` file (or export variables in your shell) with one of the following API keys:
+Copy the sample file and fill in your credentials:
+
+```bash
+cp .env.local.example .env.local
+```
+
+All variables below must be set in `.env.local` (or exported in your shell before running the dev server):
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `GOOGLE_GENAI_API_KEY` | One of this or `GOOGLE_CLOUD_API_KEY` | Gemini API key issued from Google AI Studio. |
-| `GOOGLE_CLOUD_API_KEY` | One of this or `GOOGLE_GENAI_API_KEY` | Gemini API key issued from Google Cloud (Generative Language API). `GOOGLE_GENAI_CLOUD_API_KEY` and `GOOGLE_VERTEX_API_KEY` are accepted aliases. |
-| `GOOGLE_GENAI_MODEL` | Optional | Gemini model id. Defaults to `gemini-2.5-flash-lite`. |
+| `GOOGLE_GENAI_MODEL` | Yes | Gemini model id that supports Search Grounding (e.g., `gemini-2.5-flash`). |
+| `GOOGLE_GENAI_API_KEY` | One of these four | Gemini API key issued from Google AI Studio. |
+| `GOOGLE_CLOUD_API_KEY` | One of these four | Gemini API key issued from Google Cloud (Generative Language API). |
+| `GOOGLE_GENAI_CLOUD_API_KEY` | One of these four | Alias accepted for Google Cloud Gemini API keys. |
+| `GOOGLE_VERTEX_API_KEY` | One of these four | Vertex AI Gemini API key. |
 
-When both keys are configured, `GOOGLE_GENAI_API_KEY` takes priority. If no environment variable is set, you can still add a per-browser key from **Settings → API Key** and it will be sent with each search request.
+Provide at least one API key; `GOOGLE_GENAI_API_KEY` takes priority when multiple keys are present.
 
 ## Development
 

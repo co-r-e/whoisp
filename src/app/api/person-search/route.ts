@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { DynamicRetrievalConfigMode, GoogleGenAI } from "@google/genai";
+import { serverEnv } from "@/lib/env";
 
 export const runtime = "edge"; // fast cold starts
 
-const MODEL_ID = process.env.GOOGLE_GENAI_MODEL?.trim() || "gemini-2.5-flash-lite";
+const MODEL_ID = serverEnv.GOOGLE_GENAI_MODEL;
 
 const MANDATORY_CHANNELS = [
   {
@@ -105,9 +106,7 @@ type PersonResearchInsights = {
   generatedAt?: string;
 };
 
-type SearchMode = "web" | "social";
-
-function buildWebQueries({ fullName, company, position, extraInfo }: PersonQuery) {
+function buildQueries({ fullName, company, position, extraInfo }: PersonQuery) {
   const trimmedName = fullName.trim();
   const quotedName = `"${trimmedName}"`;
   const baseParts: string[] = [];
@@ -156,47 +155,6 @@ function buildWebQueries({ fullName, company, position, extraInfo }: PersonQuery
   return Array.from(queries).slice(0, 18);
 }
 
-function buildSocialQueries({ fullName, company, position, extraInfo }: PersonQuery) {
-  const trimmedName = fullName.trim();
-  const quotedName = `"${trimmedName}"`;
-  const baseParts: string[] = [];
-  if (company && company.trim()) baseParts.push(`"${company.trim()}"`);
-  if (position && position.trim()) baseParts.push(`"${position.trim()}"`);
-  if (extraInfo && extraInfo.trim()) baseParts.push(extraInfo.trim());
-  const base = [quotedName, ...baseParts].join(" ").trim();
-
-  const plainName = trimmedName.replace(/\s+/g, " ");
-  const firstLast = plainName.split(" ");
-  const lastName = firstLast.length > 1 ? firstLast.at(-1) : plainName;
-
-  const socialSites = [
-    "site:x.com",
-    "site:twitter.com",
-    "site:linkedin.com/in",
-    "site:linkedin.com/company",
-    "site:facebook.com",
-  ];
-
-  const queries = new Set<string>();
-  queries.add(`${base || quotedName} site:x.com`.trim());
-  queries.add(`${base || quotedName} site:linkedin.com/in`.trim());
-  queries.add(`${base || quotedName} site:facebook.com`.trim());
-  queries.add(`${plainName} linkedin profile`.trim());
-  queries.add(`${plainName} x.com account`.trim());
-  queries.add(`${plainName} facebook profile`.trim());
-  queries.add(`${lastName} ${company ?? ""} linkedin`.trim());
-
-  for (const site of socialSites) {
-    queries.add(`${quotedName} ${site}`.trim());
-    if (company) queries.add(`${quotedName} ${site} "${company}"`.trim());
-  }
-
-  return Array.from(queries)
-    .map((query) => query.trim())
-    .filter(Boolean)
-    .slice(0, 16);
-}
-
 function domainFromUrl(url: string | undefined) {
   if (!url) return undefined;
   try {
@@ -209,12 +167,12 @@ function domainFromUrl(url: string | undefined) {
 function pickApiKey(requestKey: unknown) {
   const fromRequest = typeof requestKey === "string" && requestKey.trim().length > 0 ? requestKey.trim() : null;
   if (fromRequest) return fromRequest;
-  const studio = process.env.GOOGLE_GENAI_API_KEY?.trim();
+  const studio = serverEnv.GOOGLE_GENAI_API_KEY;
   if (studio) return studio;
   const cloud =
-    process.env.GOOGLE_CLOUD_API_KEY?.trim() ||
-    process.env.GOOGLE_GENAI_CLOUD_API_KEY?.trim() ||
-    process.env.GOOGLE_VERTEX_API_KEY?.trim();
+    serverEnv.GOOGLE_CLOUD_API_KEY ||
+    serverEnv.GOOGLE_GENAI_CLOUD_API_KEY ||
+    serverEnv.GOOGLE_VERTEX_API_KEY;
   if (cloud) return cloud;
   return null;
 }
@@ -249,8 +207,11 @@ function normalizeGeminiInsights(
   if (!payload) return null;
 
   const overview = toCleanString(payload.overview) ?? "";
-  const provider = toCleanString(payload.provider) ||
-    (lang === "ja" ? "Gemini 2.5 Flash-Lite (Google検索グラウンディング)" : "Gemini 2.5 Flash-Lite with Google grounding");
+  const provider =
+    toCleanString(payload.provider) ||
+    (lang === "ja"
+      ? `${MODEL_ID} (Google検索グラウンディング)`
+      : `${MODEL_ID} with Google grounding`);
   const generatedAt = toCleanString(payload.generatedAt) ?? new Date().toISOString();
 
   const sectionsInput = Array.isArray(payload.sections) ? (payload.sections as GeminiSection[]) : [];
@@ -356,27 +317,18 @@ function ensureMandatoryChannels(insights: PersonResearchInsights, lang: Lang): 
   };
 }
 
-function buildPrompt({
+function buildPrompts({
   fullName,
   company,
   position,
   extraInfo,
   queries,
   lang,
-  mode,
-}: PersonQuery & { queries: string[]; lang: Lang; mode: SearchMode }) {
+}: PersonQuery & { queries: string[]; lang: Lang }) {
   const isJa = lang === "ja";
-  const isSocial = mode === "social";
-  const header = (() => {
-    if (isSocial) {
-      return isJa
-        ? "あなたは公開情報リサーチャーです。Google検索のグラウンディングを使い、X（旧Twitter）・LinkedIn・Facebookに限定した公開情報を調査してまとめてください。"
-        : "You are a public-records researcher. Use Google grounding to investigate only X (formerly Twitter), LinkedIn, and Facebook.";
-    }
-    return isJa
-      ? "あなたは公開情報リサーチャーです。指定された人物についてGoogle検索のグラウンディングを使い、信頼できる情報だけをまとめてください。"
-      : "You are a public-records researcher. Use Google grounding to gather trustworthy information about the requested person.";
-  })();
+  const header = isJa
+    ? "あなたは公開情報リサーチャーです。指定された人物についてGoogle検索のグラウンディングを使い、信頼できる情報だけをまとめてください。"
+    : "You are a public-records researcher. Use Google grounding to gather trustworthy information about the requested person.";
 
   const outputFormat = isJa
     ? `必ずJSONのみを返してください。Markdownのコードブロックは禁止です。フォーマットは次の通りです:
@@ -420,27 +372,9 @@ function buildPrompt({
   "generatedAt": "ISO 8601 timestamp (optional)"
 }`;
 
-  const guidance = (() => {
-    if (isSocial) {
-      return isJa
-        ? "X（旧Twitter）・LinkedIn・Facebookごとにセクションを分け、確認できたアカウントや公開投稿、プロフィールの要点と、その裏付けとなるリンクを提示してください。証拠が無ければ「見つからなかった」と明記し、新しい情報を捏造しないでください。Googleのグラウンディングから得たURLのみを引用し、それ以外のサイトは扱わないでください。"
-        : "Create dedicated sections for X (formerly Twitter), LinkedIn, and Facebook. Report verified accounts, public posts, or profile details along with grounded URLs. If no trustworthy evidence exists, state clearly that nothing was found. Rely only on Google-grounded URLs for these platforms.";
-    }
-    return isJa
-      ? "各セクションでは、どの検索チャネルで何が分かったかを明確にし、引用元リンクを必ず含めてください。人物像や役割、確認できたアカウント、注目すべき出来事などを具体的に書きます。参照リンクはGoogleのグラウンディング結果から得たURLのみを使用し、裏付けの無い情報は一切書かないでください。確認できない場合は、その旨を明示し、新しい情報を作らないでください。特にX（旧Twitter）、LinkedIn、Facebookについては、証拠が得られた場合は専用のセクションを作成し、得られない場合も「見つからなかった」と明記してください。"
-      : "For each section, clarify which discovery channel was used, what it verified about the person, and include grounded URLs for every statement (Google-grounded links only). Never fabricate details—if a channel has no trustworthy evidence, explicitly state that nothing was found. Always report on X (formerly Twitter), LinkedIn, and Facebook: create dedicated sections when you have grounded evidence, or state that nothing was found if the search came up empty.";
-  })();
-
-  const modeGoal = (() => {
-    if (isSocial) {
-      return isJa
-        ? "調査対象はSNSに限定します。Googleの検索結果でもX・LinkedIn・Facebook以外のサイトは引用しないでください。"
-        : "Restrict the investigation to the three social networks only. Even when using Google, do not cite any site other than X, LinkedIn, or Facebook.";
-    }
-    return isJa
-      ? "幅広いWeb情報を調べ、人物の全体像と裏付けを整理してください。"
-      : "Explore broad web information to capture the person's overall profile with evidence.";
-  })();
+  const guidance = isJa
+    ? "各セクションでは、どの検索チャネルで何が分かったかを明確にし、引用元リンクを必ず含めてください。人物像や役割、確認できたアカウント、注目すべき出来事などを具体的に書きます。参照リンクはGoogleのグラウンディング結果から得たURLのみを使用し、裏付けの無い情報は一切書かないでください。確認できない場合は、その旨を明示し、新しい情報を作らないでください。特にX（旧Twitter）、LinkedIn、Facebookについては、証拠が得られた場合は専用のセクションを作成し、得られない場合も「見つからなかった」と明記してください。"
+    : "For each section, clarify which discovery channel was used, what it verified about the person, and include grounded URLs for every statement (Google-grounded links only). Never fabricate details—if a channel has no trustworthy evidence, explicitly state that nothing was found. Always report on X (formerly Twitter), LinkedIn, and Facebook: create dedicated sections when you have grounded evidence, or state that nothing was found if the search came up empty.";
 
   const personaLines = [
     `Full name: ${fullName}`,
@@ -453,36 +387,46 @@ function buildPrompt({
 
   const queriesLines = queries.map((query, idx) => `${idx + 1}. ${query}`).join("\n");
 
-  return [
+  const systemInstruction = [
     header,
     outputFormat,
     guidance,
     isJa
       ? "言語はすべて日本語で書いてください。"
       : "Write everything in English.",
-    modeGoal,
-    "人物情報:",
-    personaLines,
-    "推奨検索クエリ:",
-    queriesLines,
+    isJa
+      ? "幅広いWeb情報を調べ、人物の全体像と裏付けを整理してください。Groundedな証拠が得られない場合は「見つからなかった」と明確に書きます。"
+      : "Survey the public web broadly, organise the person's profile with verifiable evidence, and explicitly state when no grounded evidence exists.",
+    isJa
+      ? "各セクションの結論は対応する参照URLで必ず裏付けてください。"
+      : "Support every section conclusion with its referenced URLs; do not invent sources.",
   ]
     .filter(Boolean)
     .join("\n\n");
+
+  const userPromptParts = [
+    isJa ? "人物情報:" : "Subject information:",
+    personaLines || (isJa ? "(氏名以外の追加情報はありません)" : "(No additional profile metadata provided)"),
+    isJa ? "推奨検索クエリ:" : "Recommended search queries:",
+    queriesLines || (isJa ? "(追加の検索クエリは指定されていません)" : "(No supplemental queries supplied)"),
+  ];
+
+  const userPrompt = userPromptParts.filter(Boolean).join("\n\n");
+
+  return { systemInstruction, userPrompt };
 }
 
-function buildNoResultsInsights(lang: Lang, mode: SearchMode): PersonResearchInsights {
-  const isWeb = mode === "web";
-  const overview = isWeb
-    ? lang === "ja"
-      ? "Web調査を実行しましたが、Googleのグラウンディング付きで報告できる情報は見つかりませんでした。"
-      : "The web search completed but did not surface grounded findings to report."
-    : lang === "ja"
-      ? "SNS調査を実行しましたが、X・LinkedIn・Facebookで裏付け可能な公開情報は見つかりませんでした。"
-      : "The social search finished but found no verifiable public information on X, LinkedIn, or Facebook.";
+function buildNoResultsInsights(lang: Lang, overviewOverride?: string): PersonResearchInsights {
+  const overview =
+    overviewOverride ||
+    (lang === "ja"
+      ? "調査を実行しましたが、Googleのグラウンディング付きで報告できる情報は見つかりませんでした。"
+      : "The search completed but did not surface grounded findings to report.");
 
-  const provider = lang === "ja"
-    ? "Gemini 2.5 Flash-Lite (結果なし)"
-    : "Gemini 2.5 Flash-Lite (no grounded findings)";
+  const provider =
+    lang === "ja"
+      ? `${MODEL_ID} (結果なし)`
+      : `${MODEL_ID} (no grounded findings)`;
 
   return {
     overview,
@@ -492,15 +436,12 @@ function buildNoResultsInsights(lang: Lang, mode: SearchMode): PersonResearchIns
   };
 }
 
-async function runSearchTask(
+async function generateInsights(
   client: GoogleGenAI,
-  params: PersonQuery & { queries: string[]; lang: Lang; mode: SearchMode }
+  params: PersonQuery & { queries: string[]; lang: Lang }
 ): Promise<PersonResearchInsights> {
-  const { lang, mode } = params;
-  const prompt = buildPrompt(params);
-  const modeLabel = lang === "ja"
-    ? mode === "social" ? "SNS調査" : "Web調査"
-    : mode === "social" ? "social search" : "web search";
+  const { lang } = params;
+  const { systemInstruction, userPrompt } = buildPrompts(params);
 
   try {
     const response = await client.models.generateContent({
@@ -508,75 +449,66 @@ async function runSearchTask(
       contents: [
         {
           role: "user",
-          parts: [{ text: prompt }],
+          parts: [{ text: userPrompt }],
         },
       ],
       config: {
-        temperature: 0.2,
-        topK: 40,
+        systemInstruction: {
+          role: "system",
+          parts: [{ text: systemInstruction }],
+        },
+        temperature: 0.1,
+        topK: 32,
         topP: 0.8,
-        maxOutputTokens: 2048,
-        tools: [{ googleSearch: {} }],
+        maxOutputTokens: 3072,
+        tools: [
+          { googleSearch: {} },
+          {
+            googleSearchRetrieval: {
+              dynamicRetrievalConfig: {
+                mode: DynamicRetrievalConfigMode.MODE_DYNAMIC,
+              },
+            },
+          },
+        ],
+        toolConfig: {
+          retrievalConfig: {
+            languageCode: lang,
+          },
+        },
+        safetySettings: [],
       },
     });
 
     const normalized = normalizeGeminiInsights(extractStructuredInsights(response), lang);
-    if (!normalized) {
-      return buildNoResultsInsights(lang, mode);
+    if (normalized) {
+      return normalized;
+    }
+  } catch (error) {
+    if (isSearchGroundingUnsupported(error)) {
+      console.error("[person-search] search grounding unavailable for model", MODEL_ID);
+      return buildNoResultsInsights(
+        lang,
+        lang === "ja"
+          ? "現在のGeminiモデルまたはAPIキーではGoogle検索グラウンディングが利用できません。`GOOGLE_GENAI_MODEL=gemini-2.5-flash`など検索対応モデルを指定し、Search Grounding を有効化してください。"
+          : "Google Search grounding is disabled for the current Gemini model or API key. Set `GOOGLE_GENAI_MODEL=gemini-2.5-flash` (or another search-capable model) and enable Search Grounding to retrieve live sources."
+      );
     }
 
-    return normalized;
-  } catch (error) {
-    console.error(`[person-search] ${mode} search failed`, error);
-    if (error instanceof Error && error.message) {
-      throw error;
-    }
-    throw new Error(
-      lang === "ja"
-        ? `${modeLabel}の実行中にエラーが発生しました。後でもう一度お試しください。`
-        : `An error occurred during the ${modeLabel}. Please try again later.`
-    );
+    console.error("[person-search] search failed", error);
   }
+
+  return buildNoResultsInsights(lang);
 }
 
-function mergeInsights(parts: PersonResearchInsights[], lang: Lang): PersonResearchInsights {
-  const overviewParts: string[] = [];
-  const sections: InsightSection[] = [];
-  const providers = new Set<string>();
-  let latestGeneratedAt: string | undefined;
-
-  for (const insight of parts) {
-    if (!insight) continue;
-    if (insight.overview?.trim()) {
-      overviewParts.push(insight.overview.trim());
-    }
-    if (Array.isArray(insight.sections)) {
-      sections.push(...insight.sections);
-    }
-    if (insight.provider?.trim()) {
-      providers.add(insight.provider.trim());
-    }
-    if (insight.generatedAt) {
-      if (!latestGeneratedAt || new Date(insight.generatedAt).getTime() > new Date(latestGeneratedAt).getTime()) {
-        latestGeneratedAt = insight.generatedAt;
-      }
-    }
-  }
-
-  const overview = overviewParts.length
-    ? Array.from(new Set(overviewParts)).join("\n\n")
-    : lang === "ja"
-      ? "複数チャネルの調査結果をまとめました。"
-      : "Combined findings from parallel search channels.";
-
-  const provider = providers.size ? Array.from(providers).join(" | ") : undefined;
-
-  return {
-    overview,
-    sections,
-    provider,
-    generatedAt: latestGeneratedAt ?? new Date().toISOString(),
-  };
+function isSearchGroundingUnsupported(error: any) {
+  const message =
+    typeof error?.message === "string"
+      ? error.message
+      : typeof error?.error?.message === "string"
+        ? error.error.message
+        : "";
+  return /Search Grounding is not supported/i.test(message);
 }
 
 export async function POST(req: NextRequest) {
@@ -599,23 +531,17 @@ export async function POST(req: NextRequest) {
     if (!apiKey) {
       const message =
         lang === "ja"
-          ? "Gemini APIキーが設定されていません。環境変数または設定メニューからAPIキーを登録してください。"
-          : "Gemini API key is missing. Please configure it via environment variables or the Settings menu.";
+          ? "Gemini APIキーが設定されていません。`.env.local` にAPIキーを記載するか、設定メニューからブラウザ用キーを登録してください。"
+          : "Gemini API key is missing. Add a key to `.env.local` or provide a per-browser key from Settings.";
       return new Response(JSON.stringify({ message }), { status: 500 });
     }
 
     const client = createClient(apiKey);
     const person: PersonQuery = { fullName, company, position, extraInfo };
-    const webQueries = buildWebQueries(person);
-    const socialQueries = buildSocialQueries(person);
+    const queries = buildQueries(person);
 
-    const [webInsights, socialInsights] = await Promise.all([
-      runSearchTask(client, { ...person, queries: webQueries, lang, mode: "web" }),
-      runSearchTask(client, { ...person, queries: socialQueries, lang, mode: "social" }),
-    ]);
-
-    const combined = mergeInsights([webInsights, socialInsights], lang);
-    const insights = ensureMandatoryChannels(combined, lang);
+    const rawInsights = await generateInsights(client, { ...person, queries, lang });
+    const insights = ensureMandatoryChannels(rawInsights, lang);
 
     return new Response(JSON.stringify({ insights }), {
       headers: { "Content-Type": "application/json" },
@@ -627,8 +553,9 @@ export async function POST(req: NextRequest) {
 }
 
 function extractStructuredInsights(response: any): GeminiResearchJson | null {
-  const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
+  const candidateSources = [response, response?.response].filter(Boolean);
   const texts: string[] = [];
+  const jsonPayloads: GeminiResearchJson[] = [];
 
   const addText = (value: unknown) => {
     if (typeof value === "string" && value.trim()) {
@@ -636,15 +563,24 @@ function extractStructuredInsights(response: any): GeminiResearchJson | null {
     }
   };
 
-  addText(response?.text);
-
-  for (const candidate of candidates) {
-    const parts = candidate?.content?.parts;
-    if (Array.isArray(parts)) {
-      for (const part of parts) {
-        addText(part?.text);
+  for (const source of candidateSources) {
+    addText(source?.text);
+    const candidates = Array.isArray(source?.candidates) ? source.candidates : [];
+    for (const candidate of candidates) {
+      const parts = candidate?.content?.parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (part?.jsonValue && typeof part.jsonValue === "object") {
+            jsonPayloads.push(part.jsonValue as GeminiResearchJson);
+          }
+          addText(part?.text);
+        }
       }
     }
+  }
+
+  if (jsonPayloads.length > 0) {
+    return jsonPayloads[0];
   }
 
   for (const raw of texts) {
