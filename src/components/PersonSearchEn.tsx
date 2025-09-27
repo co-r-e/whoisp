@@ -1,6 +1,6 @@
 "use client";
 
-import PersonSearchForm, { PersonSearchResult } from "./PersonSearchForm";
+import PersonSearchForm from "./PersonSearchForm";
 
 const copyEn = {
   cardDescription:
@@ -27,19 +27,22 @@ const copyEn = {
     generic: "Something went wrong",
   },
   results: {
-    title: "Results",
-    description: "Grouped by domain.",
+    title: "Research summary",
+    description: "",
+    overviewHeading: "Overview",
+    referencesHeading: "References",
+    noReferences: "No references were returned.",
+    providerLabel: "",
+    placeholder: "Search results will appear here once you run a query.",
+    loadingTitle: "Searching the public web…",
+    loadingDescription: "Hang tight while we gather the highlights for you.",
   },
-  extraInfoPrefix: "Extra info:",
-  queryPrefix: "query: ",
 } as const;
 
 type Props = {
   projectId?: string;
   lang?: "ja" | "en";
 };
-
-export type { PersonSearchResult };
 
 export default function PersonSearchEn({ projectId, lang }: Props) {
   return <PersonSearchForm projectId={projectId} lang={lang ?? "en"} copy={copyEn} />;

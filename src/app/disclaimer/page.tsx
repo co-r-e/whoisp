@@ -21,7 +21,6 @@ export default function DisclaimerPage() {
       </ul>
       <h2>推奨される使い方</h2>
       <ul>
-        <li>ご本人のセルフチェック（デジタルフットプリントの確認）</li>
         <li>公開プロフィールの整合性確認</li>
         <li>採用・取引等における適正なリサーチ（法令順守の範囲内）</li>
       </ul>

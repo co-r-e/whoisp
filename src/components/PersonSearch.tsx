@@ -1,6 +1,6 @@
 "use client";
 
-import PersonSearchForm, { PersonSearchResult } from "./PersonSearchForm";
+import PersonSearchForm from "./PersonSearchForm";
 
 const copyJa = {
   cardDescription: "会社名・役職・氏名を入力し、WebやSNSから公開情報を横断検索します。",
@@ -26,19 +26,22 @@ const copyJa = {
     generic: "エラーが発生しました",
   },
   results: {
-    title: "検索結果",
-    description: "取得した公開情報をドメイン別に整理しています。",
+    title: "リサーチサマリー",
+    description: "",
+    overviewHeading: "全体像",
+    referencesHeading: "参照リンク",
+    noReferences: "参照リンクは見つかりませんでした。",
+    providerLabel: "",
+    placeholder: "検索結果はここに表示されます。条件を入力して検索してください。",
+    loadingTitle: "公開情報を探索しています…",
+    loadingDescription: "しばらくお待ちください。まもなくハイライトが表示されます。",
   },
-  extraInfoPrefix: "補足情報:",
-  queryPrefix: "query: ",
 } as const;
 
 type Props = {
   projectId?: string;
   lang?: "ja" | "en";
 };
-
-export type { PersonSearchResult };
 
 export default function PersonSearch({ projectId, lang }: Props) {
   return <PersonSearchForm projectId={projectId} lang={lang ?? "ja"} copy={copyJa} />;

@@ -1,7 +1,7 @@
 import PersonSearch from "@/components/PersonSearch";
 
-export default function ProjectPageJa({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default async function ProjectPageJa({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   return (
     <main className="min-h-screen w-full px-6 py-10 md:px-10 md:py-14">
       <div className="mx-auto w-full max-w-5xl space-y-8">
