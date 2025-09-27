@@ -40,8 +40,7 @@ export async function POST(request: NextRequest) {
   const writer = stream.writable.getWriter();
   const abortController = new AbortController();
 
-  const write = (payload: unknown) =>
-    writer.write(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+  const write = (payload: unknown) => writer.write(encoder.encode(`${JSON.stringify(payload)}\n`));
 
   const close = () => {
     try {
@@ -78,7 +77,7 @@ export async function POST(request: NextRequest) {
 
   return new Response(stream.readable, {
     headers: {
-      "Content-Type": "text/event-stream",
+      "Content-Type": "application/x-ndjson",
       "Cache-Control": "no-cache, no-store, must-revalidate",
       Connection: "keep-alive",
       "Transfer-Encoding": "chunked",

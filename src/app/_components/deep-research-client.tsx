@@ -146,17 +146,12 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
     [strings.idleStatus, strings.runningStatus],
   );
 
-  const processChunk = useCallback(
-    (chunk: string) => {
-      const lines = chunk.split("\n");
-      const dataLines = lines
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trim())
-        .filter(Boolean);
-      if (dataLines.length === 0) return;
-      const payload = dataLines.join("\n");
+  const processLine = useCallback(
+    (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
       try {
-        const parsed = JSON.parse(payload) as StreamEvent;
+        const parsed = JSON.parse(trimmed) as StreamEvent;
         handleEvent(parsed);
       } catch (err) {
         setError(toMessage(err));
@@ -182,16 +177,16 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
           const { value, done } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          let separatorIndex = buffer.indexOf("\n\n");
-          while (separatorIndex !== -1) {
-            const chunk = buffer.slice(0, separatorIndex);
-            buffer = buffer.slice(separatorIndex + 2);
-            processChunk(chunk);
-            separatorIndex = buffer.indexOf("\n\n");
+          let newlineIndex = buffer.indexOf("\n");
+          while (newlineIndex !== -1) {
+            const line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
+            processLine(line);
+            newlineIndex = buffer.indexOf("\n");
           }
         }
         if (buffer.trim().length > 0) {
-          processChunk(buffer);
+          processLine(buffer);
         }
       } catch (err) {
         if ((err as DOMException)?.name === "AbortError") {
@@ -200,7 +195,7 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
         setError(toMessage(err));
       }
     },
-    [processChunk],
+    [processLine],
   );
 
   const startResearch = useCallback(
