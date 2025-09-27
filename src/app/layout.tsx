@@ -1,15 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
-import VisualEditsMessenger from "../visual-edits/VisualEditsMessenger";
-import ErrorReporter from "@/components/ErrorReporter";
-import Script from "next/script";
-import AppSidebar from "@/components/AppSidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { LanguageProvider } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "WhoisP",
-  description: "Cross-search public profiles and social links in seconds.",
+  description: "Retired research prototype documenting usage notes and history.",
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },
@@ -24,30 +19,27 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
-        <ErrorReporter />
-        <Script
-          src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts//route-messenger.js"
-          strategy="afterInteractive"
-          data-target-origin="*"
-          data-message-type="ROUTE_CHANGE"
-          data-include-search-params="true"
-          data-only-in-iframe="true"
-          data-debug="true"
-          data-custom-data='{"appName": "WhoisP", "version": "1.0.0", "greeting": "hi"}'
-        />
-        <LanguageProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <div className="px-3 py-3 md:px-4">
-                <SidebarTrigger />
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <div className="flex min-h-screen flex-col">
+          <header className="border-b border-border">
+            <nav className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4 text-sm">
+              <Link href="/" className="text-base font-semibold tracking-tight">
+                WhoisP
+              </Link>
+              <div className="flex items-center gap-4">
+                <Link href="/disclaimer" className="underline underline-offset-4">
+                  Usage notes
+                </Link>
+                <Link href="/ja" className="underline underline-offset-4">
+                  日本語
+                </Link>
               </div>
-              {children}
-            </SidebarInset>
-          </SidebarProvider>
-        </LanguageProvider>
-        <VisualEditsMessenger />
+            </nav>
+          </header>
+          <main className="flex-1">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );

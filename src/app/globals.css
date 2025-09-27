@@ -1,12 +1,6 @@
 /* Updated: 2025-09-24T14:29:43.318Z */
 /* Updated: 2025-09-24T12:52:21.807Z */
-/* Updated: 2025-09-24T12:52:17.319Z */
-/* Updated: 2025-09-24T11:48:21.161Z */
-/* Updated: 2025-09-24T09:02:58.138Z */
-/* Updated: 2025-09-24T06:22:48.039Z */
-/* Updated: 2025-09-24T05:48:58.075Z */
 @import "tailwindcss";
-@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -131,41 +125,4 @@
 /* Hide Next.js error overlay portal */
 nextjs-portal {
   display: none !important;
-}
-
-@layer utilities {
-  @keyframes whoisp-ring {
-    0%,
-    100% {
-      transform: scale(0.95);
-      opacity: 0.6;
-    }
-    50% {
-      transform: scale(1.05);
-      opacity: 0.3;
-    }
-  }
-
-  @keyframes whoisp-tilt {
-    0%,
-    100% {
-      transform: translateY(0) rotate(-4deg);
-    }
-    50% {
-      transform: translateY(-6px) rotate(4deg);
-    }
-  }
-
-  .searching-ring {
-    animation: whoisp-ring 1.6s ease-in-out infinite;
-  }
-
-  .searching-ring-delayed {
-    animation: whoisp-ring 1.6s ease-in-out 0.3s infinite;
-  }
-
-  .searching-character {
-    transform-origin: 50% 90%;
-    animation: whoisp-tilt 1.4s ease-in-out infinite;
-  }
 }
