@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import {
@@ -96,6 +98,73 @@ const initialState: ResearchState = {
   steps: [],
   report: null,
   sources: [],
+};
+
+function cx(...classes: Array<string | undefined>): string {
+  return classes.filter(Boolean).join(" ");
+}
+
+const reportMarkdownComponents: Components = {
+  h1: ({ node: _node, className, ...props }) => (
+    <h1 {...props} className={cx("mt-4 text-xl font-semibold text-foreground first:mt-0", className)} />
+  ),
+  h2: ({ node: _node, className, ...props }) => (
+    <h2 {...props} className={cx("mt-4 text-lg font-semibold text-foreground first:mt-0", className)} />
+  ),
+  h3: ({ node: _node, className, ...props }) => (
+    <h3 {...props} className={cx("mt-4 text-base font-semibold text-foreground first:mt-0", className)} />
+  ),
+  p: ({ node: _node, className, ...props }) => (
+    <p {...props} className={cx("mt-2 text-sm leading-relaxed text-foreground", className)} />
+  ),
+  ul: ({ node: _node, className, ...props }) => (
+    <ul {...props} className={cx("mt-3 list-disc space-y-2 pl-5 text-sm text-foreground", className)} />
+  ),
+  ol: ({ node: _node, className, ...props }) => (
+    <ol {...props} className={cx("mt-3 list-decimal space-y-2 pl-5 text-sm text-foreground", className)} />
+  ),
+  li: ({ node: _node, className, ...props }) => (
+    <li {...props} className={cx("leading-relaxed", className)} />
+  ),
+  a: ({ node: _node, className, ...props }) => (
+    <a
+      {...props}
+      target={props.target ?? "_blank"}
+      rel={props.rel ?? "noreferrer"}
+      className={cx("text-primary underline", className)}
+    />
+  ),
+  strong: ({ node: _node, className, ...props }) => (
+    <strong {...props} className={cx("font-semibold text-foreground", className)} />
+  ),
+  em: ({ node: _node, className, ...props }) => (
+    <em {...props} className={cx("italic text-foreground", className)} />
+  ),
+  blockquote: ({ node: _node, className, ...props }) => (
+    <blockquote
+      {...props}
+      className={cx(
+        "mt-3 border-l-2 border-muted-foreground/50 pl-3 text-sm italic text-foreground/90",
+        className,
+      )}
+    />
+  ),
+  hr: ({ node: _node, className, ...props }) => (
+    <hr {...props} className={cx("my-4 border-muted", className)} />
+  ),
+  code: ({ node: _node, inline, className, children, ...props }) => (
+    <code
+      {...props}
+      className={cx(
+        inline
+          ? "rounded bg-muted px-1 py-0.5 text-[0.8125rem]"
+          : "block rounded-md bg-muted/60 p-3 text-sm",
+        className,
+      )}
+    >
+      {children}
+    </code>
+  ),
 };
 
 export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchClientProps) {
@@ -386,7 +455,11 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
 
   const reportContent = hasReport ? (
     <article className="rounded-lg border bg-card p-4">
-      <pre className="whitespace-pre-wrap text-sm leading-relaxed">{state.report}</pre>
+      <div className="space-y-3 text-sm leading-relaxed text-foreground">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={reportMarkdownComponents}>
+          {state.report ?? ""}
+        </ReactMarkdown>
+      </div>
     </article>
   ) : (
     <p className="text-sm text-muted-foreground">{strings.reportEmpty}</p>

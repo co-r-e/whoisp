@@ -1,6 +1,6 @@
 export const enStrings = {
   queryLabel: "Research query",
-  placeholder: "What do you need to investigate?",
+  placeholder: "Person name Company name",
   submit: "Run DeepResearch",
   stop: "Cancel",
   idleStatus: "Use the sidebar to start a new investigation.",
@@ -19,7 +19,7 @@ export const enStrings = {
 
 export const jaStrings = {
   queryLabel: "調査したい内容",
-  placeholder: "調べたいテーマを入力してください",
+  placeholder: "調査対象者名 会社名",
   submit: "DeepResearch を実行",
   stop: "中止",
   idleStatus: "サイドバーからクエリを入力して調査を開始してください。",
