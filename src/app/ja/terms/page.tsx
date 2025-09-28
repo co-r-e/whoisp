@@ -24,7 +24,7 @@ export default function TermsJaPage() {
           本サービスは予告なく変更または終了する場合があります。データ保持は保証されず、メンテナンス時にセッションが削除される可能性があります。
         </p>
       </section>
-      <section id="usage-notes" className="space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+      <section id="usage-notes" className="space-y-4 rounded-lg border border-border bg-card p-4">
         <h2 className="text-base font-medium">利用上の注意・免責事項</h2>
         <p className="text-sm text-muted-foreground">
           本アプリは、氏名・会社名・役職などの入力情報をもとに、検索エンジン/スクレイピングAPIを利用して Web上の公開情報を横断的に収集・整理するためのツールです。

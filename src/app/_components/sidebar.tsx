@@ -12,7 +12,7 @@ import {
 
 function linkClasses(isActive: boolean) {
   const base = "group flex w-full items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm transition-colors";
-  const active = "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm";
+  const active = "bg-sidebar-accent text-sidebar-accent-foreground";
   const inactive = "text-sidebar-foreground/80 hover:border-sidebar-border hover:bg-sidebar-accent/60 hover:text-sidebar-foreground";
   return `${base} ${isActive ? active : inactive}`;
 }
@@ -160,7 +160,7 @@ export default function Sidebar() {
                       }}
                     >
                       <input
-                        className="flex-1 rounded-md border border-input bg-card px-2 py-1 text-sm shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                        className="flex-1 rounded-md border border-input bg-card px-2 py-1 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                         autoFocus
                         value={draftTitle}
                         onChange={(event) => setDraftTitle(event.target.value)}
@@ -234,7 +234,7 @@ export default function Sidebar() {
           {isSettingsOpen ? (
             <div
               ref={settingsMenuRef}
-              className="absolute bottom-16 left-4 right-4 z-50 rounded-lg border border-sidebar-border bg-popover p-2 text-sm shadow-lg"
+              className="absolute bottom-16 left-4 right-4 z-50 rounded-lg border border-sidebar-border bg-popover p-2 text-sm"
               role="menu"
             >
               <button

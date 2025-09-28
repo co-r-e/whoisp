@@ -296,7 +296,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
             <input
               id="query"
               name="query"
-              className="flex-1 rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex-1 rounded-md border px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               placeholder={strings.placeholder}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -305,7 +305,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
             <div className="flex gap-2">
               <button
                 type="submit"
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
                 disabled={isRunning || !query.trim()}
               >
                 {strings.submit}
@@ -314,7 +314,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
                 <button
                   type="button"
                   onClick={handleCancel}
-                  className="rounded-md border px-4 py-2 text-sm font-semibold shadow"
+                  className="rounded-md border px-4 py-2 text-sm font-semibold"
                 >
                   {strings.stop}
                 </button>
@@ -334,7 +334,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
           <p className="text-sm text-muted-foreground">{strings.planExpectation}</p>
           <div className="grid gap-3 md:grid-cols-2">
             {planSteps.map((step) => (
-              <article key={step.id} className="rounded-lg border bg-card p-4 shadow-sm">
+              <article key={step.id} className="rounded-lg border bg-card p-4">
                 <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
                   <span>{step.id}</span>
                   <span>{step.angle}</span>
@@ -353,7 +353,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
           <h2 className="text-xl font-semibold">{strings.evidenceHeading}</h2>
           <div className="space-y-4">
             {orderedSteps.map((step) => (
-              <article key={step.stepId} className="rounded-lg border bg-card p-4 shadow-sm">
+              <article key={step.stepId} className="rounded-lg border bg-card p-4">
                 <header className="flex flex-col gap-1">
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">{step.stepId}</span>
                   <h3 className="text-lg font-semibold">{step.title}</h3>
@@ -399,7 +399,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
       {state.report ? (
         <section className="mx-auto w-full max-w-5xl space-y-3">
           <h2 className="text-xl font-semibold">{strings.reportHeading}</h2>
-          <article className="rounded-lg border bg-card p-4 shadow-sm">
+          <article className="rounded-lg border bg-card p-4">
             <pre className="whitespace-pre-wrap text-sm leading-relaxed">
               {state.report}
             </pre>

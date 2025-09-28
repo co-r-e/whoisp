@@ -28,7 +28,7 @@ export default function TermsPage() {
           session history stored locally may be cleared during maintenance or browser resets.
         </p>
       </section>
-      <section id="usage-notes" className="space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+      <section id="usage-notes" className="space-y-4 rounded-lg border border-border bg-card p-4">
         <h2 className="text-base font-medium">Usage Notes & Disclaimers</h2>
         <p className="text-sm text-muted-foreground">
           This app collects and organises publicly available information using search engines and scraping APIs
