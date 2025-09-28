@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import {
   type HistoryLocale,
   useHistoryContext,
 } from "./history-context";
+import { useResearchRun } from "./research-run-context";
 
 type Locale = "en" | "ja";
 
@@ -94,15 +95,16 @@ const initialState: ResearchState = {
 };
 
 export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchClientProps) {
-  const [query, setQuery] = useState("");
   const [state, setState] = useState(initialState);
-  const [status, setStatus] = useState<string>(strings.idleStatus);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastStartedQuery, setLastStartedQuery] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { ensureSession, touchSession, renameIfUntitled, getDefaultTitle } = useHistoryContext();
+  const { setStatus: setGlobalStatus, setRunningState } = useResearchRun();
 
   useEffect(() => {
     if (!sessionId) return;
@@ -122,14 +124,15 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
     abortRef.current?.abort();
     abortRef.current = null;
     setIsRunning(false);
-    setStatus(strings.idleStatus);
-  }, [strings.idleStatus]);
+    setRunningState(false);
+    setGlobalStatus(strings.idleStatus);
+  }, [setGlobalStatus, setRunningState, strings.idleStatus]);
 
   const handleEvent = useCallback(
     (event: StreamEvent) => {
       switch (event.type) {
         case "status":
-          setStatus(event.status === "started" ? strings.runningStatus : event.status);
+          setGlobalStatus(event.status === "started" ? strings.runningStatus : event.status);
           break;
         case "plan":
           setState((prev) => ({ ...prev, plan: event.plan }));
@@ -143,30 +146,33 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
           });
           break;
         case "analysis":
-          setStatus(event.notes);
+          setGlobalStatus(event.notes);
           break;
         case "final":
           setState((prev) => ({ ...prev, report: event.report, sources: event.sources }));
-          setStatus(strings.idleStatus);
+          setGlobalStatus(strings.idleStatus);
           setIsRunning(false);
+          setRunningState(false);
           abortRef.current = null;
           break;
         case "done":
           setIsRunning(false);
+          setRunningState(false);
           abortRef.current = null;
-          setStatus(strings.idleStatus);
+          setGlobalStatus(strings.idleStatus);
           break;
         case "error":
           setError(event.message);
           setIsRunning(false);
+          setRunningState(false);
           abortRef.current = null;
-          setStatus(strings.idleStatus);
+          setGlobalStatus(strings.idleStatus);
           break;
         default:
           break;
       }
     },
-    [strings.idleStatus, strings.runningStatus],
+    [setGlobalStatus, setRunningState, strings.idleStatus, strings.runningStatus],
   );
 
   const processLine = useCallback(
@@ -189,6 +195,8 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
       if (!reader) {
         setError("Streaming is not supported in this environment.");
         setIsRunning(false);
+        setRunningState(false);
+        setGlobalStatus(strings.idleStatus);
         return;
       }
 
@@ -216,9 +224,12 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
           return;
         }
         setError(toMessage(err));
+        setIsRunning(false);
+        setRunningState(false);
+        setGlobalStatus(strings.idleStatus);
       }
     },
-    [processLine],
+    [processLine, setGlobalStatus, setRunningState, strings.idleStatus],
   );
 
   const startResearch = useCallback(
@@ -226,9 +237,10 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
       const controller = new AbortController();
       abortRef.current = controller;
       setIsRunning(true);
-      setStatus(strings.runningStatus);
+      setGlobalStatus(strings.runningStatus);
       setError(null);
       setState(initialState);
+      setRunningState(true, handleCancel);
 
       if (sessionId) {
         renameIfUntitled(sessionId, currentQuery);
@@ -264,20 +276,36 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
         setError(toMessage(err));
         setIsRunning(false);
         abortRef.current = null;
-        setStatus(strings.idleStatus);
+        setRunningState(false);
+        setGlobalStatus(strings.idleStatus);
       }
     },
-    [consumeStream, locale, renameIfUntitled, sessionId, strings.idleStatus, strings.runningStatus, touchSession],
+    [consumeStream, handleCancel, locale, renameIfUntitled, sessionId, setGlobalStatus, setRunningState, strings.idleStatus, strings.runningStatus, touchSession],
   );
 
-  const handleSubmit = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (!query.trim()) return;
-      await startResearch(query.trim());
-    },
-    [query, startResearch],
-  );
+  useEffect(() => {
+    setLastStartedQuery(null);
+  }, [sessionId]);
+
+  useEffect(() => {
+    setRunningState(isRunning, isRunning ? handleCancel : undefined);
+  }, [handleCancel, isRunning, setRunningState]);
+
+  useEffect(() => {
+    setGlobalStatus(strings.idleStatus);
+  }, [setGlobalStatus, strings.idleStatus]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const paramValue = searchParams.get("q");
+    const trimmed = paramValue?.trim();
+    if (!trimmed) return;
+    if (isRunning) return;
+    if (lastStartedQuery === trimmed) return;
+
+    setLastStartedQuery(trimmed);
+    void startResearch(trimmed);
+  }, [isRunning, lastStartedQuery, searchParams, sessionId, startResearch]);
 
   const activePlan = state.plan;
   const planSteps = activePlan?.steps ?? [];
@@ -287,52 +315,17 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
 
   return (
     <div className="w-full px-4 pt-8 pb-12 md:px-6 md:pt-10 md:pb-16 flex flex-col gap-12">
-      <section className="mx-auto w-full max-w-5xl space-y-4">
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          <label className="text-sm font-medium" htmlFor="query">
-            {strings.queryLabel}
-          </label>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <input
-              id="query"
-              name="query"
-              className="flex-1 rounded-md border px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              placeholder={strings.placeholder}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              disabled={isRunning}
-            />
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-                disabled={isRunning || !query.trim()}
-              >
-                {strings.submit}
-              </button>
-              {isRunning ? (
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="rounded-md border px-4 py-2 text-sm font-semibold"
-                >
-                  {strings.stop}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </form>
-        <p className="text-sm text-muted-foreground">{status}</p>
-        {error ? (
+      {error ? (
+        <section className="mx-auto w-full max-w-5xl">
           <p className="text-sm text-destructive">{strings.errorLabel}: {error}</p>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
 
       {activePlan ? (
         <section className="mx-auto w-full max-w-5xl space-y-3">
           <h2 className="text-xl font-semibold">{strings.planHeading}</h2>
           <p className="text-sm text-muted-foreground">{strings.planExpectation}</p>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="flex flex-col gap-3">
             {planSteps.map((step) => (
               <article key={step.id} className="rounded-lg border bg-card p-4">
                 <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">

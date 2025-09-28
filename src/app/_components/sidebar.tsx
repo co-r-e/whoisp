@@ -3,12 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type HistoryLocale,
   useHistoryContext,
 } from "./history-context";
+import { enStrings, jaStrings } from "./deep-research-strings";
+import { useResearchRun } from "./research-run-context";
 
 function linkClasses(isActive: boolean) {
   const base = "group flex w-full items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm transition-colors";
@@ -29,18 +31,21 @@ export default function Sidebar() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+  const [queryDraft, setQueryDraft] = useState("");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const locale = getLocaleFromPath(pathname);
   const isJapanese = locale === "ja";
+  const strings = isJapanese ? jaStrings : enStrings;
+  const { status, isRunning, cancel } = useResearchRun();
 
   const localeItems = useMemo(() => {
     return items.filter((item) => item.locale === locale);
   }, [items, locale]);
 
-  function handleToggleLocale() {
+  const handleToggleLocale = useCallback(() => {
     const query = searchParams.toString();
     const hash = typeof window !== "undefined" ? window.location.hash : "";
 
@@ -57,14 +62,26 @@ export default function Sidebar() {
     const url = `${targetPath}${query ? `?${query}` : ""}${hash}`;
     router.push(url);
     setIsSettingsOpen(false);
-  }
+  }, [isJapanese, pathname, router, searchParams]);
 
-  function handleNewSession() {
-    const session = createSession(locale);
-    setEditingId(session.id);
-    setDraftTitle(session.title);
-    router.push(session.path);
-  }
+  const handleQuerySubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmed = queryDraft.trim();
+      if (!trimmed) return;
+
+      const session = createSession(locale);
+      setEditingId(null);
+      setDraftTitle("");
+      setIsSettingsOpen(false);
+      setQueryDraft("");
+
+      const params = new URLSearchParams();
+      params.set("q", trimmed);
+      router.push(`${session.path}?${params.toString()}`);
+    },
+    [createSession, locale, queryDraft, router],
+  );
 
   function beginEdit(id: string, currentTitle: string) {
     setEditingId(id);
@@ -102,7 +119,9 @@ export default function Sidebar() {
     setIsSettingsOpen(false);
   }
 
-  const newButtonLabel = isJapanese ? "新規調査" : "New investigation";
+  const isSubmitDisabled = queryDraft.trim().length === 0;
+  const historyHeading = isJapanese ? "履歴" : "History";
+  const emptyHistoryLabel = isJapanese ? "まだ調査はありません。" : "No investigations yet.";
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -125,8 +144,8 @@ export default function Sidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex h-full flex-col">
-        <div className="px-4 pb-4 pt-6">
-            <Link href={isJapanese ? "/ja" : "/"} className="flex items-center justify-center">
+        <div className="space-y-4 px-4 pb-5 pt-6">
+          <Link href={isJapanese ? "/ja" : "/"} className="flex items-center justify-center">
             <Image
               src="/logo.svg"
               alt="WhoisP logo"
@@ -136,87 +155,118 @@ export default function Sidebar() {
               priority
             />
           </Link>
-          <button
-            type="button"
-            onClick={handleNewSession}
-            className="mt-4 flex h-10 w-full items-center justify-center rounded-lg border border-dashed border-sidebar-border text-sm font-medium text-sidebar-foreground transition-colors hover:border-sidebar-border/80 hover:bg-sidebar-accent/50"
-          >
-            {newButtonLabel}
-          </button>
+          <form className="space-y-2" onSubmit={handleQuerySubmit}>
+            <input
+              id="sidebar-query"
+              name="query"
+              className="w-full rounded-md border border-sidebar-border bg-card px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              placeholder={strings.placeholder}
+              value={queryDraft}
+              onChange={(event) => setQueryDraft(event.target.value)}
+              aria-label={strings.queryLabel}
+            />
+            <button
+              type="submit"
+              className="h-10 w-full rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isSubmitDisabled}
+            >
+              {strings.submit}
+            </button>
+            <div className="space-y-1">
+              <p className="min-h-[1.25rem] text-xs text-sidebar-foreground/70">{status || strings.idleStatus}</p>
+              {isRunning ? (
+                <button
+                  type="button"
+                  onClick={() => cancel?.()}
+                  className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar px-3 text-xs font-semibold text-sidebar-foreground transition-colors hover:bg-sidebar-accent/40"
+                >
+                  {strings.stop}
+                </button>
+              ) : null}
+            </div>
+          </form>
         </div>
-        <div className="flex-1 overflow-y-auto px-4">
-          <nav className="flex flex-col gap-2 pb-6">
-            {localeItems.map((item) => {
-              const isActive = pathname === item.path;
-              const isEditing = editingId === item.id;
-              return (
-                <div key={item.id} className={linkClasses(isActive)}>
-                  {isEditing ? (
-                    <form
-                      className="flex w-full items-center gap-2"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        commitEdit(item.id, item.locale);
-                      }}
-                    >
-                      <input
-                        className="flex-1 rounded-md border border-input bg-card px-2 py-1 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                        autoFocus
-                        value={draftTitle}
-                        onChange={(event) => setDraftTitle(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            cancelEdit();
-                          }
+        <div className="flex-1" />
+        <div className="border-t border-sidebar-border px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/60">
+            {historyHeading}
+          </p>
+          <nav className="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
+            {localeItems.length === 0 ? (
+              <p className="text-sm text-sidebar-foreground/60">{emptyHistoryLabel}</p>
+            ) : (
+              localeItems.map((item) => {
+                const isActive = pathname === item.path;
+                const isEditing = editingId === item.id;
+                return (
+                  <div key={item.id} className={linkClasses(isActive)}>
+                    {isEditing ? (
+                      <form
+                        className="flex w-full items-center gap-2"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          commitEdit(item.id, item.locale);
                         }}
-                      />
-                      <button
-                        type="submit"
-                        className="rounded px-2 py-1 text-xs font-medium text-sidebar-primary transition-colors hover:bg-sidebar-accent/60"
                       >
-                        {isJapanese ? "保存" : "Save"}
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/40"
-                        onClick={cancelEdit}
-                      >
-                        {isJapanese ? "取消" : "Cancel"}
-                      </button>
-                    </form>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleNavigate(item.path, item.id)}
-                      className="flex-1 text-left"
-                    >
-                      <span className="block truncate text-sm font-medium">{item.title}</span>
-                    </button>
-                  )}
-                  {!isEditing ? (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-                        onClick={() => beginEdit(item.id, item.title)}
-                        aria-label={isJapanese ? "名称を編集" : "Rename"}
-                      >
-                        ✎
-                      </button>
+                        <input
+                          className="flex-1 rounded-md border border-input bg-card px-2 py-1 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                          autoFocus
+                          value={draftTitle}
+                          onChange={(event) => setDraftTitle(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              cancelEdit();
+                            }
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          className="rounded px-2 py-1 text-xs font-medium text-sidebar-primary transition-colors hover:bg-sidebar-accent/60"
+                        >
+                          {isJapanese ? "保存" : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/40"
+                          onClick={cancelEdit}
+                        >
+                          {isJapanese ? "取消" : "Cancel"}
+                        </button>
+                      </form>
+                    ) : (
                       <button
                         type="button"
-                        className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-destructive"
-                        onClick={() => handleDelete(item.id, item.path)}
-                        aria-label={isJapanese ? "削除" : "Delete"}
+                        onClick={() => handleNavigate(item.path, item.id)}
+                        className="flex-1 text-left"
                       >
-                        ×
+                        <span className="block truncate text-sm font-medium">{item.title}</span>
                       </button>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
+                    )}
+                    {!isEditing ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                          onClick={() => beginEdit(item.id, item.title)}
+                          aria-label={isJapanese ? "名称を編集" : "Rename"}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-destructive"
+                          onClick={() => handleDelete(item.id, item.path)}
+                          aria-label={isJapanese ? "削除" : "Delete"}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
           </nav>
         </div>
         <div className="relative border-t border-sidebar-border bg-sidebar px-4 py-4">
