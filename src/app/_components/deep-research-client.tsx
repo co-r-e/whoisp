@@ -324,10 +324,12 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
   const planContent = hasPlanSteps
     ? planSteps.map((step) => (
         <article key={step.id} className="rounded-lg border bg-card p-4">
-          <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">
             <span>{step.id}</span>
-            <span>{step.angle}</span>
           </div>
+          {step.angle ? (
+            <p className="mt-1 text-xs text-muted-foreground">{step.angle}</p>
+          ) : null}
           <h3 className="mt-2 text-base font-semibold text-foreground">{step.title}</h3>
           <p className="mt-1 text-sm text-foreground/80">{step.query}</p>
           <p className="mt-2 text-sm text-foreground/90">{step.deliverable}</p>
