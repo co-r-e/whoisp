@@ -68,9 +68,13 @@ type UiStrings = {
   runningStatus: string;
   planHeading: string;
   planExpectation: string;
+  planEmpty: string;
   evidenceHeading: string;
+  evidenceEmpty: string;
   reportHeading: string;
+  reportEmpty: string;
   sourcesHeading: string;
+  sourcesEmpty: string;
   errorLabel: string;
 };
 
@@ -312,119 +316,139 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
   const orderedSteps = useMemo(() => {
     return [...state.steps].sort((a, b) => a.stepId.localeCompare(b.stepId));
   }, [state.steps]);
+  const hasPlanSteps = planSteps.length > 0;
+  const hasEvidence = orderedSteps.length > 0;
+  const hasReport = Boolean(state.report);
+  const hasSources = state.sources.length > 0;
+
+  const planContent = hasPlanSteps
+    ? planSteps.map((step) => (
+        <article key={step.id} className="rounded-lg border bg-card p-4">
+          <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+            <span>{step.id}</span>
+            <span>{step.angle}</span>
+          </div>
+          <h3 className="mt-2 text-base font-semibold text-foreground">{step.title}</h3>
+          <p className="mt-1 text-sm text-foreground/80">{step.query}</p>
+          <p className="mt-2 text-sm text-foreground/90">{step.deliverable}</p>
+        </article>
+      ))
+    : (
+        <p className="text-sm text-muted-foreground">{strings.planEmpty}</p>
+      );
+
+  const evidenceContent = hasEvidence
+    ? orderedSteps.map((step) => (
+        <article key={step.stepId} className="rounded-lg border bg-card p-4">
+          <header className="flex flex-col gap-1">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">{step.stepId}</span>
+            <h3 className="text-lg font-semibold">{step.title}</h3>
+            {step.summary ? (
+              <p className="text-sm text-foreground">{step.summary}</p>
+            ) : null}
+          </header>
+          {step.findings.length > 0 ? (
+            <ul className="mt-4 space-y-3 text-sm">
+              {step.findings.map((finding) => (
+                <li key={`${step.stepId}-${finding.heading}`} className="rounded-md bg-muted/40 p-3">
+                  <p className="font-medium">{finding.heading}</p>
+                  <p className="mt-1 text-foreground">{finding.insight}</p>
+                  {finding.evidence ? (
+                    <p className="mt-1 text-foreground/90">{finding.evidence}</p>
+                  ) : null}
+                  {finding.sources.length > 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {finding.sources.map((source) => `[${source.id}]`).join(" ")}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {step.sources.length > 0 ? (
+            <footer className="mt-4 border-t pt-3 text-xs text-muted-foreground">
+              <span>Sources: </span>
+              {step.sources.map((source, index) => (
+                <span key={source.id}>
+                  {index > 0 ? ", " : null}
+                  [{source.id}] {source.domain ?? source.url}
+                </span>
+              ))}
+            </footer>
+          ) : null}
+        </article>
+      ))
+    : (
+        <p className="text-sm text-muted-foreground">{strings.evidenceEmpty}</p>
+      );
+
+  const reportContent = hasReport ? (
+    <article className="rounded-lg border bg-card p-4">
+      <pre className="whitespace-pre-wrap text-sm leading-relaxed">{state.report}</pre>
+    </article>
+  ) : (
+    <p className="text-sm text-muted-foreground">{strings.reportEmpty}</p>
+  );
+
+  const sourcesContent = hasSources ? (
+    <ol className="space-y-2 text-sm">
+      {state.sources.map((source) => (
+        <li key={source.id} className="rounded-md border bg-card/50 p-3">
+          <p className="font-medium">[{source.id}] {source.title}</p>
+          {source.domain ? (
+            <p className="text-xs text-muted-foreground">{source.domain}</p>
+          ) : null}
+          <a
+            className="mt-1 block break-words text-xs text-primary underline"
+            href={source.url}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {source.url}
+          </a>
+        </li>
+      ))}
+    </ol>
+  ) : (
+    <p className="text-sm text-muted-foreground">{strings.sourcesEmpty}</p>
+  );
 
   return (
-    <div className="w-full px-4 pt-8 pb-12 md:px-6 md:pt-10 md:pb-16 flex flex-col gap-12">
+    <div className="w-full px-4 pt-8 pb-12 md:px-6 md:pt-10 md:pb-16 flex flex-col gap-6">
       {error ? (
         <section className="mx-auto w-full max-w-5xl">
           <p className="text-sm text-destructive">{strings.errorLabel}: {error}</p>
         </section>
       ) : null}
 
-      {activePlan ? (
-        <section className="mx-auto w-full max-w-5xl space-y-3">
-          <h2 className="text-xl font-semibold">{strings.planHeading}</h2>
-          <p className="text-sm text-muted-foreground">{strings.planExpectation}</p>
-          <div className="flex flex-col gap-3">
-            {planSteps.map((step) => (
-              <article key={step.id} className="rounded-lg border bg-card p-4">
-                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
-                  <span>{step.id}</span>
-                  <span>{step.angle}</span>
-                </div>
-                <h3 className="mt-2 text-base font-semibold">{step.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{step.query}</p>
-                <p className="mt-2 text-sm">{step.deliverable}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <div className="w-full overflow-x-auto">
+        <div className="flex gap-6 min-w-[1280px] pb-4">
+          <section className="flex w-[320px] shrink-0 flex-col gap-3">
+            <header className="space-y-2">
+              <h2 className="text-xl font-semibold">{strings.planHeading}</h2>
+              {strings.planExpectation ? (
+                <p className="text-sm text-muted-foreground">{strings.planExpectation}</p>
+              ) : null}
+            </header>
+            <div className="flex flex-col gap-3">{planContent}</div>
+          </section>
 
-      {orderedSteps.length > 0 ? (
-        <section className="mx-auto w-full max-w-5xl space-y-4">
-          <h2 className="text-xl font-semibold">{strings.evidenceHeading}</h2>
-          <div className="space-y-4">
-            {orderedSteps.map((step) => (
-              <article key={step.stepId} className="rounded-lg border bg-card p-4">
-                <header className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">{step.stepId}</span>
-                  <h3 className="text-lg font-semibold">{step.title}</h3>
-                  {step.summary ? (
-                    <p className="text-sm text-muted-foreground">{step.summary}</p>
-                  ) : null}
-                </header>
-                {step.findings.length > 0 ? (
-                  <ul className="mt-4 space-y-3 text-sm">
-                    {step.findings.map((finding) => (
-                      <li key={`${step.stepId}-${finding.heading}`} className="rounded-md bg-muted/40 p-3">
-                        <p className="font-medium">{finding.heading}</p>
-                        <p className="mt-1 text-muted-foreground">{finding.insight}</p>
-                        {finding.evidence ? (
-                          <p className="mt-1 text-muted-foreground/80">{finding.evidence}</p>
-                        ) : null}
-                        {finding.sources.length > 0 ? (
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            {finding.sources.map((source) => `[${source.id}]`).join(" ")}
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {step.sources.length > 0 ? (
-                  <footer className="mt-4 border-t pt-3 text-xs text-muted-foreground">
-                    <span>Sources: </span>
-                    {step.sources.map((source, index) => (
-                      <span key={source.id}>
-                        {index > 0 ? ", " : null}
-                        [{source.id}] {source.domain ?? source.url}
-                      </span>
-                    ))}
-                  </footer>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
+          <section className="flex w-[640px] shrink-0 flex-col gap-3">
+            <h2 className="text-xl font-semibold">{strings.evidenceHeading}</h2>
+            <div className="flex flex-col gap-3">{evidenceContent}</div>
+          </section>
 
-      {state.report ? (
-        <section className="mx-auto w-full max-w-5xl space-y-3">
-          <h2 className="text-xl font-semibold">{strings.reportHeading}</h2>
-          <article className="rounded-lg border bg-card p-4">
-            <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-              {state.report}
-            </pre>
-          </article>
-        </section>
-      ) : null}
+          <section className="flex w-[640px] shrink-0 flex-col gap-3">
+            <h2 className="text-xl font-semibold">{strings.reportHeading}</h2>
+            {reportContent}
+          </section>
 
-      {state.sources.length > 0 ? (
-        <section className="mx-auto w-full max-w-5xl space-y-3">
-          <h2 className="text-xl font-semibold">{strings.sourcesHeading}</h2>
-          <ol className="space-y-2 text-sm">
-            {state.sources.map((source) => (
-              <li key={source.id} className="rounded-md border bg-card/50 p-3">
-                <p className="font-medium">
-                  [{source.id}] {source.title}
-                </p>
-                {source.domain ? (
-                  <p className="text-xs text-muted-foreground">{source.domain}</p>
-                ) : null}
-                <a
-                  className="mt-1 inline-flex text-xs text-primary underline"
-                  href={source.url}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  {source.url}
-                </a>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
+          <section className="flex w-[320px] shrink-0 flex-col gap-3">
+            <h2 className="text-xl font-semibold">{strings.sourcesHeading}</h2>
+            {sourcesContent}
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
