@@ -13,6 +13,10 @@ export type SessionHistoryItem = {
   updatedAt: number;
 };
 
+function orderByCreatedAtDescending(list: SessionHistoryItem[]) {
+  return [...list].sort((a, b) => b.createdAt - a.createdAt);
+}
+
 type HistoryContextValue = {
   items: SessionHistoryItem[];
   createSession: (locale: HistoryLocale) => SessionHistoryItem;
@@ -37,11 +41,13 @@ function readInitialItems(): SessionHistoryItem[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as SessionHistoryItem[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({
-      ...item,
-      createdAt: typeof item.createdAt === "number" ? item.createdAt : Date.now(),
-      updatedAt: typeof item.updatedAt === "number" ? item.updatedAt : Date.now(),
-    }));
+    return orderByCreatedAtDescending(
+      parsed.map((item) => ({
+        ...item,
+        createdAt: typeof item.createdAt === "number" ? item.createdAt : Date.now(),
+        updatedAt: typeof item.updatedAt === "number" ? item.updatedAt : Date.now(),
+      })),
+    );
   } catch {
     return [];
   }
@@ -74,16 +80,15 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
     if (initial.length === 0) return;
     setItems((prev) => {
       if (prev.length === 0) {
-        return initial;
+        return orderByCreatedAtDescending(initial);
       }
       const existingIds = new Set(prev.map((item) => item.id));
-      const merged = [...prev];
-      initial.forEach((item) => {
-        if (!existingIds.has(item.id)) {
-          merged.push(item);
-        }
-      });
-      return merged;
+      const normalizedInitial = orderByCreatedAtDescending(initial);
+      const newItems = normalizedInitial.filter((item) => !existingIds.has(item.id));
+      if (newItems.length === 0) {
+        return prev;
+      }
+      return [...newItems, ...prev];
     });
   }, []);
 
@@ -104,7 +109,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
       createdAt: now,
       updatedAt: now,
     };
-    setItems((prev) => [...prev, item]);
+    setItems((prev) => [item, ...prev]);
     return item;
   }, []);
 
@@ -130,7 +135,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
             : entry,
         );
       }
-      return [...prev, normalized];
+      return [normalized, ...prev];
     });
 
     return normalized;

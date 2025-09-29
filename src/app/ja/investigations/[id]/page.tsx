@@ -8,11 +8,13 @@ export const metadata: Metadata = {
 };
 
 type JaInvestigationPageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
-export default function JaInvestigationPage({ params }: JaInvestigationPageProps) {
-  return <DeepResearchClient locale="ja" strings={jaStrings} sessionId={params.id} />;
+export default async function JaInvestigationPage({ params }: JaInvestigationPageProps) {
+  const { id } = await params;
+
+  return <DeepResearchClient locale="ja" strings={jaStrings} sessionId={id} />;
 }
