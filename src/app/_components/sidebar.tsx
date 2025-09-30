@@ -39,7 +39,7 @@ export default function Sidebar() {
   const locale = getLocaleFromPath(pathname);
   const isJapanese = locale === "ja";
   const strings = isJapanese ? jaStrings : enStrings;
-  const { status, isRunning, cancel } = useResearchRun();
+  const { status, isRunning, cancel, images, imagesStatus, isImagesLoading } = useResearchRun();
 
   const localeItems = useMemo(() => {
     return items.filter((item) => item.locale === locale);
@@ -184,6 +184,54 @@ export default function Sidebar() {
                 </button>
               ) : null}
             </div>
+            <section className="space-y-1" aria-live="polite">
+              <p className="text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/60">
+                {strings.imagesHeading}
+              </p>
+              {isImagesLoading ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div
+                      key={`image-skeleton-${index}`}
+                      className="aspect-square rounded-md border border-sidebar-border/60 bg-sidebar-border/30 animate-pulse"
+                    />
+                  ))}
+                </div>
+              ) : images.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {images.slice(0, 10).map((image) => {
+                    const targetUrl = image.sourceUrl ?? image.url;
+                    const label = image.sourceTitle ?? image.title ?? strings.imagesHeading;
+                    return (
+                      <a
+                        key={`${image.url}-${image.thumbnailUrl ?? "full"}`}
+                        href={targetUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="group relative block overflow-hidden rounded-md border border-sidebar-border bg-card shadow-sm transition hover:border-primary"
+                      >
+                        <Image
+                          src={image.thumbnailUrl ?? image.url}
+                          alt={image.title ?? strings.imagesHeading}
+                          width={96}
+                          height={96}
+                          loading="lazy"
+                          sizes="96px"
+                          className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-105"
+                        />
+                        <span className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full bg-black/70 px-1 py-0.5 text-[10px] text-white transition group-hover:translate-y-0">
+                          {label}
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-sidebar-foreground/60">
+                  {imagesStatus === "empty" ? strings.imagesNotFound : strings.imagesEmpty}
+                </p>
+              )}
+            </section>
           </form>
         </div>
         <div className="flex-1" />

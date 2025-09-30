@@ -1,7 +1,9 @@
 import JSON5 from "json5";
 import type { Candidate, Content, GroundingChunk } from "@google/genai";
 import type { GoogleGenAI } from "@google/genai/node";
+import { fetchSubjectImages } from "./fetchSubjectImages";
 import { getGeminiClient } from "./geminiClient";
+import type { DeepResearchImage } from "@/shared/deep-research-types";
 
 type Locale = "en" | "ja";
 
@@ -45,6 +47,7 @@ type StepResult = {
 };
 
 type DeepResearchEvent =
+  | { type: "images"; images: DeepResearchImage[] }
   | { type: "plan"; plan: DeepResearchPlan }
   | { type: "search"; step: StepResult }
   | { type: "analysis"; notes: string }
@@ -220,6 +223,21 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
   const { client, model } = getGeminiClient();
   const sourceRegistry = new Map<string, SourceReference>();
   const orderedSources: SourceReference[] = [];
+
+  let subjectImages: DeepResearchImage[] = [];
+  try {
+    subjectImages = await fetchSubjectImages(trimmed, {
+      locale: options.locale,
+      signal: options.signal,
+    });
+  } catch (error) {
+    if ((error as DOMException)?.name === "AbortError") {
+      throw error;
+    }
+    console.error("Subject image lookup failed", error);
+  }
+
+  await options.emit({ type: "images", images: subjectImages });
 
   const registerSource = (candidate: SourceCandidate): SourceReference => {
     const key = candidate.url.toLowerCase();

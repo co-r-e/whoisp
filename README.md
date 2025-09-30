@@ -22,6 +22,7 @@ Create a `.env.local` (or reuse `.env.local.example`) and provide the following 
 | `GEMINI_MODEL` | Optional. Defaults to `gemini-2.5-flash-lite`. Override to swap models without code changes. |
 | `GOOGLE_API_KEY` | Google Cloud Gemini API key. Takes precedence when both keys are present. |
 | `GEMINI_API_KEY` | Google AI Studio API key. Used when `GOOGLE_API_KEY` is absent. |
+| `GOOGLE_CSE_CX` | Required for subject image lookup. Programmable Search Engine CX identifier. |
 | `GOOGLE_GENAI_USE_VERTEXAI` | Set to `true` to target Vertex AI endpoints. Requires the variables below. |
 | `GOOGLE_CLOUD_PROJECT` | Required when Vertex mode is enabled. Provide the human-readable project ID. |
 | `GOOGLE_CLOUD_LOCATION` | Required when Vertex mode is enabled (for example, `us-central1`). |

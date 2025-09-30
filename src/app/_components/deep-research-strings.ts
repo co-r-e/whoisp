@@ -15,6 +15,10 @@ export const enStrings = {
   sourcesHeading: "References",
   sourcesEmpty: "References will be listed once the run finishes.",
   errorLabel: "Error",
+  imagesHeading: "Likely subject photos",
+  imagesLoading: "Fetching images…",
+  imagesEmpty: "Images will appear here after DeepResearch starts.",
+  imagesNotFound: "No images found for this subject.",
 } as const;
 
 export const jaStrings = {
@@ -34,6 +38,10 @@ export const jaStrings = {
   sourcesHeading: "参照元",
   sourcesEmpty: "調査完了後に参照元リンクが表示されます。",
   errorLabel: "エラー",
+  imagesHeading: "想定される対象者の写真",
+  imagesLoading: "画像を取得しています…",
+  imagesEmpty: "調査を実行するとここに画像候補が表示されます。",
+  imagesNotFound: "該当する画像は見つかりませんでした。",
 } as const;
 
 export type DeepResearchUiStrings = typeof enStrings;

@@ -1,6 +1,17 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import type { DeepResearchImage } from "@/shared/deep-research-types";
 
 type ResearchRunContextValue = {
   status: string;
@@ -8,13 +19,22 @@ type ResearchRunContextValue = {
   cancel: (() => void) | null;
   setStatus: (value: string) => void;
   setRunningState: (running: boolean, cancel?: () => void) => void;
+  images: DeepResearchImage[];
+  setImages: Dispatch<SetStateAction<DeepResearchImage[]>>;
+  imagesStatus: ImagesStatus;
+  setImagesStatus: Dispatch<SetStateAction<ImagesStatus>>;
+  isImagesLoading: boolean;
 };
 
 const ResearchRunContext = createContext<ResearchRunContextValue | null>(null);
 
+export type ImagesStatus = "idle" | "loading" | "success" | "empty";
+
 export function ResearchRunProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+  const [images, setImages] = useState<DeepResearchImage[]>([]);
+  const [imagesStatus, setImagesStatus] = useState<ImagesStatus>("idle");
   const cancelRef = useRef<(() => void) | null>(null);
 
   const setRunningState = useCallback((running: boolean, cancel?: () => void) => {
@@ -33,8 +53,13 @@ export function ResearchRunProvider({ children }: { children: React.ReactNode })
       cancel: cancelRef.current ? cancel : null,
       setStatus,
       setRunningState,
+      images,
+      setImages,
+      imagesStatus,
+      setImagesStatus,
+      isImagesLoading: imagesStatus === "loading",
     }),
-    [status, isRunning, cancel, setRunningState, setStatus],
+    [status, isRunning, cancel, images, imagesStatus, setRunningState, setStatus, setImages, setImagesStatus],
   );
 
   return <ResearchRunContext.Provider value={value}>{children}</ResearchRunContext.Provider>;

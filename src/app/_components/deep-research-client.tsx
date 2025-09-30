@@ -10,6 +10,7 @@ import {
   useHistoryContext,
 } from "./history-context";
 import { useResearchRun } from "./research-run-context";
+import type { DeepResearchImage } from "@/shared/deep-research-types";
 
 type Locale = "en" | "ja";
 
@@ -51,6 +52,7 @@ type DeepResearchPlan = {
 };
 
 type StreamEvent =
+  | { type: "images"; images: DeepResearchImage[] }
   | { type: "status"; status: string }
   | { type: "plan"; plan: DeepResearchPlan }
   | { type: "search"; step: StepResult }
@@ -78,6 +80,10 @@ type UiStrings = {
   sourcesHeading: string;
   sourcesEmpty: string;
   errorLabel: string;
+  imagesHeading: string;
+  imagesLoading: string;
+  imagesEmpty: string;
+  imagesNotFound: string;
 };
 
 type DeepResearchClientProps = {
@@ -177,7 +183,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { ensureSession, touchSession, renameIfUntitled, getDefaultTitle } = useHistoryContext();
-  const { setStatus: setGlobalStatus, setRunningState } = useResearchRun();
+  const { setStatus: setGlobalStatus, setRunningState, setImages, setImagesStatus } = useResearchRun();
 
   useEffect(() => {
     if (!sessionId) return;
@@ -199,11 +205,17 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
     setIsRunning(false);
     setRunningState(false);
     setGlobalStatus(strings.idleStatus);
-  }, [setGlobalStatus, setRunningState, strings.idleStatus]);
+    setImages([]);
+    setImagesStatus("idle");
+  }, [setGlobalStatus, setImages, setImagesStatus, setRunningState, strings.idleStatus]);
 
   const handleEvent = useCallback(
     (event: StreamEvent) => {
       switch (event.type) {
+        case "images":
+          setImages(event.images);
+          setImagesStatus(event.images.length > 0 ? "success" : "empty");
+          break;
         case "status":
           setGlobalStatus(event.status === "started" ? strings.runningStatus : event.status);
           break;
@@ -227,12 +239,14 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
           setIsRunning(false);
           setRunningState(false);
           abortRef.current = null;
+          setImagesStatus((prev) => (prev === "loading" ? "empty" : prev));
           break;
         case "done":
           setIsRunning(false);
           setRunningState(false);
           abortRef.current = null;
           setGlobalStatus(strings.idleStatus);
+          setImagesStatus((prev) => (prev === "loading" ? "empty" : prev));
           break;
         case "error":
           setError(event.message);
@@ -240,12 +254,14 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
           setRunningState(false);
           abortRef.current = null;
           setGlobalStatus(strings.idleStatus);
+          setImages([]);
+          setImagesStatus("idle");
           break;
         default:
           break;
       }
     },
-    [setGlobalStatus, setRunningState, strings.idleStatus, strings.runningStatus],
+    [setGlobalStatus, setImages, setImagesStatus, setRunningState, strings.idleStatus, strings.runningStatus],
   );
 
   const processLine = useCallback(
@@ -300,9 +316,11 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
         setIsRunning(false);
         setRunningState(false);
         setGlobalStatus(strings.idleStatus);
+        setImages([]);
+        setImagesStatus("idle");
       }
     },
-    [processLine, setGlobalStatus, setRunningState, strings.idleStatus],
+    [processLine, setGlobalStatus, setImages, setImagesStatus, setRunningState, strings.idleStatus],
   );
 
   const startResearch = useCallback(
@@ -314,6 +332,8 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
       setError(null);
       setState(initialState);
       setRunningState(true, handleCancel);
+      setImages([]);
+      setImagesStatus("loading");
 
       if (sessionId) {
         renameIfUntitled(sessionId, currentQuery);
@@ -351,9 +371,24 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
         abortRef.current = null;
         setRunningState(false);
         setGlobalStatus(strings.idleStatus);
+        setImages([]);
+        setImagesStatus("idle");
       }
     },
-    [consumeStream, handleCancel, locale, renameIfUntitled, sessionId, setGlobalStatus, setRunningState, strings.idleStatus, strings.runningStatus, touchSession],
+    [
+      consumeStream,
+      handleCancel,
+      locale,
+      renameIfUntitled,
+      sessionId,
+      setGlobalStatus,
+      setImages,
+      setImagesStatus,
+      setRunningState,
+      strings.idleStatus,
+      strings.runningStatus,
+      touchSession,
+    ],
   );
 
   useEffect(() => {
@@ -500,7 +535,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
         <div className="flex gap-6 min-w-[1280px] pb-4">
           <section className="flex w-[320px] shrink-0 flex-col gap-3">
             <header className="space-y-2">
-              <h2 className="text-xl font-semibold">{strings.planHeading}</h2>
+              <h2 className="text-base font-semibold">{strings.planHeading}</h2>
               {strings.planExpectation ? (
                 <p className="text-sm text-muted-foreground">{strings.planExpectation}</p>
               ) : null}
@@ -509,17 +544,17 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
           </section>
 
           <section className="flex w-[640px] shrink-0 flex-col gap-3">
-            <h2 className="text-xl font-semibold">{strings.evidenceHeading}</h2>
+            <h2 className="text-base font-semibold">{strings.evidenceHeading}</h2>
             <div className="flex flex-col gap-3">{evidenceContent}</div>
           </section>
 
           <section className="flex w-[640px] shrink-0 flex-col gap-3">
-            <h2 className="text-xl font-semibold">{strings.reportHeading}</h2>
+            <h2 className="text-base font-semibold">{strings.reportHeading}</h2>
             {reportContent}
           </section>
 
           <section className="flex w-[320px] shrink-0 flex-col gap-3">
-            <h2 className="text-xl font-semibold">{strings.sourcesHeading}</h2>
+            <h2 className="text-base font-semibold">{strings.sourcesHeading}</h2>
             {sourcesContent}
           </section>
         </div>
