@@ -121,7 +121,7 @@ const PLAN_SCHEMA = {
 
 const PLAN_SYSTEM_PROMPT = `You are a senior research strategist. Design concise, sequential investigation plans that break complex questions into focused web research actions. Each step should have a unique id, specific search intent, and a deliverable that advances the overall objective.`;
 
-const EVIDENCE_SYSTEM_PROMPT = `You are a meticulous research analyst. For each assigned sub-query, run targeted web searches, extract only the most relevant facts, and return structured findings with explicit evidence. Do not invent citations; rely solely on the retrieved material.`;
+const EVIDENCE_SYSTEM_PROMPT = `You are a meticulous research analyst. For each assigned sub-query, run targeted web searches, extract only the most relevant facts, and return structured findings with explicit evidence. Do not invent citations; rely solely on the retrieved material. Prioritize newer, more recent information over older data when evaluating sources and findings.`;
 
 const FINAL_SYSTEM_PROMPT = `You are the lead analyst preparing the final deliverable for an exhaustive research sprint. Integrate the vetted findings, highlight tensions in the evidence, and surface the most important next questions. Prioritize and give more weight to newer, more recent information over older data when synthesizing the report.`;
 
@@ -293,7 +293,7 @@ async function generatePlan(
 ): Promise<DeepResearchPlan> {
   const planPrompt = localeDirective(
     locale,
-    `Today is ${TODAY}. Break the research question into 3-5 decisive web investigation steps. Each step should target a different angle or source type and build toward a synthesis.`,
+    `Today is ${TODAY}. Break the research question into 3-5 decisive web investigation steps. Each step should target a different angle or source type and build toward a synthesis. When planning, prioritize finding the most recent and up-to-date information available.`,
   ) +
     `\n\nResearch question: ${query}`;
 
@@ -350,7 +350,7 @@ async function gatherEvidence(
 ): Promise<StepResult> {
   const userPrompt = localeDirective(
     locale,
-    `You are executing step ${step.id} of a research mission that targets the question: "${query}". Focus strictly on this sub-query: "${step.query}". Use real-time web research to pull verifiable facts. Return findings that advance the deliverable: ${step.deliverable}.`
+    `You are executing step ${step.id} of a research mission that targets the question: "${query}". Focus strictly on this sub-query: "${step.query}". Use real-time web research to pull verifiable facts. Prioritize the most recent and up-to-date information available, giving more weight to newer sources. Return findings that advance the deliverable: ${step.deliverable}.`
   );
 
   let lastError: Error | null = null;
@@ -473,7 +473,7 @@ async function synthesizeReport(
 
   const userPrompt = localeDirective(
     locale,
-    `Synthesize the DeepResearch investigation into a concise but thorough report. Cite sources with bracket numbers (e.g., [1]) that correspond to the provided catalog.`,
+    `Synthesize the DeepResearch investigation into a concise but thorough report. Cite sources with bracket numbers (e.g., [1]) that correspond to the provided catalog. Give priority and more weight to newer, more recent information when synthesizing findings.`,
   ) +
     `\n\nResearch question: ${query}\n\nPrimary goal: ${plan.primaryGoal}\nRationale: ${plan.rationale}\nExpected insights: ${plan.expectedInsights.join("; ")}\n\nPlan outline:\n${planOutline}\n\nFindings summary:\n${findingsOutline}\n\nSources catalog:\n${referencesCatalog}\n\nStructure the response with the following sections in order: Overview, Key Findings (bulleted), Contradictions, Open Questions, References. Ensure every factual claim is cited.`;
 

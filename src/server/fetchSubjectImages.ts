@@ -126,7 +126,7 @@ export async function fetchSubjectImages(
     cx: cseCx,
     q: subject,
     searchType: "image",
-    num: "10",
+    num: "9",
     safe: "active",
     imgType: "face",
   });
@@ -186,7 +186,7 @@ export async function fetchSubjectImages(
         sourceTitle: extractSourceTitle(item.image?.contextLink),
       });
 
-      if (images.length >= 10) {
+      if (images.length >= 9) {
         break;
       }
     }

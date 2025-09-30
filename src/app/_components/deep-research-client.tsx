@@ -457,7 +457,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
             <ul className="mt-4 space-y-3 text-sm">
               {step.findings.map((finding) => (
                 <li key={`${step.stepId}-${finding.heading}`} className="rounded-md bg-muted/40 p-3">
-                  <p className="font-medium">{finding.heading}</p>
+                  <p className="font-bold text-foreground">{finding.heading}</p>
                   <p className="mt-1 text-foreground">{finding.insight}</p>
                   {finding.evidence ? (
                     <p className="mt-1 text-foreground/90">{finding.evidence}</p>

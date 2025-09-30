@@ -198,33 +198,35 @@ export default function Sidebar() {
                   ))}
                 </div>
               ) : images.length > 0 ? (
-                <div className="grid grid-cols-3 gap-2">
-                  {images.slice(0, 10).map((image) => {
-                    const targetUrl = image.sourceUrl ?? image.url;
-                    const label = image.sourceTitle ?? image.title ?? strings.imagesHeading;
-                    return (
-                      <a
-                        key={`${image.url}-${image.thumbnailUrl ?? "full"}`}
-                        href={targetUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="group relative block overflow-hidden rounded-md border border-sidebar-border bg-card shadow-sm transition hover:border-primary"
-                      >
-                        <Image
-                          src={image.thumbnailUrl ?? image.url}
-                          alt={image.title ?? strings.imagesHeading}
-                          width={96}
-                          height={96}
-                          loading="lazy"
-                          sizes="96px"
-                          className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-105"
-                        />
-                        <span className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full bg-black/70 px-1 py-0.5 text-[10px] text-white transition group-hover:translate-y-0">
-                          {label}
-                        </span>
-                      </a>
-                    );
-                  })}
+                <div className="max-h-48 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-3 gap-2">
+                    {images.slice(0, 9).map((image) => {
+                      const targetUrl = image.sourceUrl ?? image.url;
+                      const label = image.sourceTitle ?? image.title ?? strings.imagesHeading;
+                      return (
+                        <a
+                          key={`${image.url}-${image.thumbnailUrl ?? "full"}`}
+                          href={targetUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="group relative block overflow-hidden rounded-md border border-sidebar-border bg-card transition hover:border-primary"
+                        >
+                          <Image
+                            src={image.thumbnailUrl ?? image.url}
+                            alt={image.title ?? strings.imagesHeading}
+                            width={96}
+                            height={96}
+                            loading="lazy"
+                            sizes="96px"
+                            className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-105"
+                          />
+                          <span className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full bg-black/70 px-1 py-0.5 text-[10px] text-white transition group-hover:translate-y-0">
+                            {label}
+                          </span>
+                        </a>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-sidebar-foreground/60">

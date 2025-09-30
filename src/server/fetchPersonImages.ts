@@ -6,7 +6,7 @@ export type FetchPersonImagesOptions = {
   signal?: AbortSignal;
 };
 
-const MAX_IMAGES = 10;
+const MAX_IMAGES = 9;
 const WIKIMEDIA_ENDPOINT = "https://commons.wikimedia.org/w/api.php";
 const ACCEPTED_MIME_TYPES = new Set([
   "image/jpeg",
