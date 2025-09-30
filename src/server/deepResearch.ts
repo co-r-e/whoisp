@@ -156,12 +156,15 @@ function parseJson<T>(raw: string, context: string): T {
 }
 
 function extractJsonObject(raw: string, context: string): string {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
+  // Remove markdown code fences if present
+  let cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "");
+
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) {
     throw new Error(`${context} response did not contain a JSON object.`);
   }
-  return raw.slice(start, end + 1);
+  return cleaned.slice(start, end + 1);
 }
 
 function extractCitations(candidate?: Candidate | null): SourceCandidate[] {
@@ -350,68 +353,93 @@ async function gatherEvidence(
     `You are executing step ${step.id} of a research mission that targets the question: "${query}". Focus strictly on this sub-query: "${step.query}". Use real-time web research to pull verifiable facts. Return findings that advance the deliverable: ${step.deliverable}.`
   );
 
-  const response = await client.models.generateContent({
-    model,
-    contents: createContent(userPrompt),
-    config: {
-      ...(signal ? { abortSignal: signal } : {}),
-      temperature: 0.35,
-      topP: 0.9,
-      maxOutputTokens: 2048,
-      automaticFunctionCalling: {},
-      tools: [{ googleSearch: {} }],
-      systemInstruction: {
-        role: "system",
-        parts: [
-          {
-            text:
-              `${EVIDENCE_SYSTEM_PROMPT}\nFormat your entire reply as minified JSON with the exact shape: {"summary": string, "findings": [{"heading": string, "insight": string, "evidence": string, "confidence"?: string, "sourceIds"?: number[]}]}.\nDo not include Markdown fences or any text before/after the JSON.\nUse sourceIds to reference 1-indexed citations emitted by the tool calls in the order they are returned.`,
-          },
-        ],
-      },
-    },
-  });
+  let lastError: Error | null = null;
+  const maxRetries = 2;
 
-  const text = response.text;
-  if (!text) {
-    throw new Error(`Evidence generation for step ${step.id} returned an empty response.`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await client.models.generateContent({
+        model,
+        contents: createContent(userPrompt),
+        config: {
+          ...(signal ? { abortSignal: signal } : {}),
+          temperature: 0.35,
+          topP: 0.9,
+          maxOutputTokens: 2048,
+          automaticFunctionCalling: {},
+          tools: [{ googleSearch: {} }],
+          systemInstruction: {
+            role: "system",
+            parts: [
+              {
+                text:
+                  `${EVIDENCE_SYSTEM_PROMPT}\nFormat your entire reply as minified JSON with the exact shape: {"summary": string, "findings": [{"heading": string, "insight": string, "evidence": string, "confidence"?: string, "sourceIds"?: number[]}]}.\nDo not include Markdown fences or any text before/after the JSON.\nUse sourceIds to reference 1-indexed citations emitted by the tool calls in the order they are returned.`,
+              },
+            ],
+          },
+        },
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error(`Evidence generation for step ${step.id} returned an empty response.`);
+      }
+
+      const jsonPayload = extractJsonObject(text, `evidence for step ${step.id}`);
+      const payload = parseJson<EvidencePayload>(jsonPayload, `evidence for step ${step.id}`);
+      const candidate = response.candidates?.[0];
+      const citations = extractCitations(candidate);
+
+      const indexToSource = new Map<number, SourceReference>();
+      citations.forEach((citation) => {
+        const ref = registerSource(citation);
+        indexToSource.set(citation.index, ref);
+      });
+
+      const uniqueSources = Array.from(new Map(Array.from(indexToSource.values()).map((ref) => [ref.id, ref])).values());
+
+      const findings: StepFinding[] = (payload.findings ?? []).map((finding) => {
+        const sourceIds = Array.isArray(finding.sourceIds) ? finding.sourceIds : [];
+        const references = sourceIds
+          .map((id) => indexToSource.get(id - 1))
+          .filter((ref): ref is SourceReference => Boolean(ref));
+
+        return {
+          heading: finding.heading.trim(),
+          insight: finding.insight.trim(),
+          evidence: finding.evidence.trim(),
+          confidence: finding.confidence?.trim(),
+          sources: Array.from(new Map(references.map((ref) => [ref.id, ref])).values()),
+        };
+      });
+
+      return {
+        stepId: step.id,
+        title: step.title,
+        summary: payload.summary?.trim() ?? "",
+        queries: candidate?.groundingMetadata?.retrievalQueries ?? [],
+        findings,
+        sources: uniqueSources,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`Attempt ${attempt + 1} failed for step ${step.id}:`, lastError.message);
+
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
   }
 
-  const jsonPayload = extractJsonObject(text, `evidence for step ${step.id}`);
-  const payload = parseJson<EvidencePayload>(jsonPayload, `evidence for step ${step.id}`);
-  const candidate = response.candidates?.[0];
-  const citations = extractCitations(candidate);
-
-  const indexToSource = new Map<number, SourceReference>();
-  citations.forEach((citation) => {
-    const ref = registerSource(citation);
-    indexToSource.set(citation.index, ref);
-  });
-
-  const uniqueSources = Array.from(new Map(Array.from(indexToSource.values()).map((ref) => [ref.id, ref])).values());
-
-  const findings: StepFinding[] = (payload.findings ?? []).map((finding) => {
-    const sourceIds = Array.isArray(finding.sourceIds) ? finding.sourceIds : [];
-    const references = sourceIds
-      .map((id) => indexToSource.get(id - 1))
-      .filter((ref): ref is SourceReference => Boolean(ref));
-
-    return {
-      heading: finding.heading.trim(),
-      insight: finding.insight.trim(),
-      evidence: finding.evidence.trim(),
-      confidence: finding.confidence?.trim(),
-      sources: Array.from(new Map(references.map((ref) => [ref.id, ref])).values()),
-    };
-  });
-
+  // If all retries failed, return a minimal result instead of throwing
+  console.error(`All retries failed for step ${step.id}. Returning minimal result.`);
   return {
     stepId: step.id,
     title: step.title,
-    summary: payload.summary?.trim() ?? "",
-    queries: candidate?.groundingMetadata?.retrievalQueries ?? [],
-    findings,
-    sources: uniqueSources,
+    summary: `Evidence collection failed after ${maxRetries + 1} attempts: ${lastError?.message ?? "Unknown error"}`,
+    queries: [],
+    findings: [],
+    sources: [],
   };
 }
 
