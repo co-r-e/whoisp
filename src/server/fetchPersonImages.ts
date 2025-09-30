@@ -142,11 +142,13 @@ function buildSearchQuery(query: string, locale: AppLocale): string {
 export async function fetchPersonImages(query: string, { locale, signal }: FetchPersonImagesOptions): Promise<PersonImageResponse> {
   const trimmed = query.trim();
   if (!trimmed) {
+    console.warn("[fetchPersonImages] Empty query provided");
     return { images: [] };
   }
 
   const tokens = tokenize(trimmed);
   if (tokens.length === 0) {
+    console.warn("[fetchPersonImages] No valid tokens extracted from query:", trimmed);
     return { images: [] };
   }
 
@@ -168,37 +170,52 @@ export async function fetchPersonImages(query: string, { locale, signal }: Fetch
 
   const url = `${WIKIMEDIA_ENDPOINT}?${params.toString()}`;
 
-  const response = await fetch(url, {
-    method: "GET",
-    signal,
-    headers: {
-      "User-Agent": buildUserAgent(),
-    },
-  });
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal,
+      headers: {
+        "User-Agent": buildUserAgent(),
+      },
+      timeout: 10000, // 10秒タイムアウト
+    });
 
-  if (!response.ok) {
-    throw new Error(`Wikimedia request failed with ${response.status}`);
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      console.error(`[fetchPersonImages] Wikimedia API returned ${response.status}`, errorBody.slice(0, 200));
+      throw new Error(`Wikimedia request failed with ${response.status}`);
+    }
+
+    const data = (await response.json()) as WikimediaResponse;
+    if (data.error) {
+      console.error("[fetchPersonImages] Wikimedia API error:", data.error);
+      throw new Error(data.error.info ?? "Wikimedia API error");
+    }
+
+    const pages = data.query?.pages ? Object.values(data.query.pages) : [];
+    console.log(`[fetchPersonImages] Received ${pages.length} pages from Wikimedia for query: "${trimmed}"`);
+
+    const seen = new Set<string>();
+    const images: PersonImage[] = [];
+
+    for (const page of pages) {
+      const image = normalizeImage(page, tokens, { requireTokenMatch });
+      if (!image) continue;
+      const key = image.fullSizeUrl.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      images.push(image);
+      if (images.length >= MAX_IMAGES) break;
+    }
+
+    console.log(`[fetchPersonImages] Returning ${images.length} images for query: "${trimmed}"`);
+    return { images };
+  } catch (error) {
+    if ((error as DOMException)?.name === "AbortError") {
+      console.warn("[fetchPersonImages] Request aborted for query:", trimmed);
+      throw error;
+    }
+    console.error("[fetchPersonImages] Fetch failed for query:", trimmed, error);
+    throw error;
   }
-
-  const data = (await response.json()) as WikimediaResponse;
-  if (data.error) {
-    throw new Error(data.error.info ?? "Wikimedia API error");
-  }
-
-  const pages = data.query?.pages ? Object.values(data.query.pages) : [];
-
-  const seen = new Set<string>();
-  const images: PersonImage[] = [];
-
-  for (const page of pages) {
-    const image = normalizeImage(page, tokens, { requireTokenMatch });
-    if (!image) continue;
-    const key = image.fullSizeUrl.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    images.push(image);
-    if (images.length >= MAX_IMAGES) break;
-  }
-
-  return { images };
 }
