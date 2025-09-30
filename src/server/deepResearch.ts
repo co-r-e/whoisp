@@ -123,7 +123,7 @@ const PLAN_SYSTEM_PROMPT = `You are a senior research strategist. Design concise
 
 const EVIDENCE_SYSTEM_PROMPT = `You are a meticulous research analyst. For each assigned sub-query, run targeted web searches, extract only the most relevant facts, and return structured findings with explicit evidence. Do not invent citations; rely solely on the retrieved material.`;
 
-const FINAL_SYSTEM_PROMPT = `You are the lead analyst preparing the final deliverable for an exhaustive research sprint. Integrate the vetted findings, highlight tensions in the evidence, and surface the most important next questions.`;
+const FINAL_SYSTEM_PROMPT = `You are the lead analyst preparing the final deliverable for an exhaustive research sprint. Integrate the vetted findings, highlight tensions in the evidence, and surface the most important next questions. Prioritize and give more weight to newer, more recent information over older data when synthesizing the report.`;
 
 const TODAY = "2025-09-27";
 
