@@ -119,13 +119,38 @@ const PLAN_SCHEMA = {
   },
 } as const;
 
+const EVIDENCE_SCHEMA = {
+  type: "object",
+  required: ["summary", "findings"],
+  properties: {
+    summary: { type: "string" },
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["heading", "insight", "evidence"],
+        properties: {
+          heading: { type: "string" },
+          insight: { type: "string" },
+          evidence: { type: "string" },
+          confidence: { type: "string" },
+          sourceIds: {
+            type: "array",
+            items: { type: "integer" },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
 const PLAN_SYSTEM_PROMPT = `You are a senior research strategist. Design concise, sequential investigation plans that break complex questions into focused web research actions. Each step should have a unique id, specific search intent, and a deliverable that advances the overall objective.`;
 
 const EVIDENCE_SYSTEM_PROMPT = `You are a meticulous research analyst. For each assigned sub-query, run targeted web searches, extract only the most relevant facts, and return structured findings with explicit evidence. Do not invent citations; rely solely on the retrieved material. Prioritize newer, more recent information over older data when evaluating sources and findings.`;
 
 const FINAL_SYSTEM_PROMPT = `You are the lead analyst preparing the final deliverable for an exhaustive research sprint. Integrate the vetted findings, highlight tensions in the evidence, and surface the most important next questions. Prioritize and give more weight to newer, more recent information over older data when synthesizing the report.`;
 
-const TODAY = "2025-09-27";
+const TODAY = new Date().toISOString().split('T')[0];
 
 function localeDirective(locale: Locale, base: string): string {
   if (locale === "ja") {
@@ -156,15 +181,33 @@ function parseJson<T>(raw: string, context: string): T {
 }
 
 function extractJsonObject(raw: string, context: string): string {
-  // Remove markdown code fences if present
-  let cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "");
+  if (!raw || raw.trim().length === 0) {
+    console.error(`[extractJsonObject] Empty response for ${context}`);
+    throw new Error(`${context} response was empty.`);
+  }
 
+  // Remove markdown code fences if present
+  let cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+
+  // Try to find JSON object
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
+
   if (start === -1 || end === -1 || end <= start) {
+    console.error(`[extractJsonObject] No JSON object found in ${context} response:`, cleaned.slice(0, 200));
     throw new Error(`${context} response did not contain a JSON object.`);
   }
-  return cleaned.slice(start, end + 1);
+
+  const extracted = cleaned.slice(start, end + 1);
+
+  // Validate it's parseable JSON
+  try {
+    JSON.parse(extracted);
+    return extracted;
+  } catch (e) {
+    console.error(`[extractJsonObject] Invalid JSON in ${context}:`, extracted.slice(0, 200));
+    throw new Error(`${context} response contained invalid JSON.`);
+  }
 }
 
 function extractCitations(candidate?: Candidate | null): SourceCandidate[] {
@@ -217,6 +260,49 @@ function inferDomain(url: string | undefined): string | undefined {
   }
 }
 
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    // Remove query parameters and hash for better deduplication
+    // Keep protocol and path normalization
+    let normalized = `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`;
+    // Remove trailing slash unless it's the root path
+    if (normalized.endsWith('/') && normalized.length > parsed.protocol.length + parsed.hostname.length + 3) {
+      normalized = normalized.slice(0, -1);
+    }
+    return normalized.toLowerCase();
+  } catch {
+    return url.toLowerCase();
+  }
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  // If signal is already aborted, reject immediately
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(errorMessage));
+      }, timeoutMs);
+
+      // Clean up timeout if signal is aborted
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timeoutId);
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
+    }),
+  ]);
+}
+
 export async function runDeepResearch(query: string, options: RunOptions): Promise<void> {
   const trimmed = query.trim();
   if (!trimmed) {
@@ -235,15 +321,17 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
     });
   } catch (error) {
     if ((error as DOMException)?.name === "AbortError") {
-      throw error;
+      // If aborted during image fetch, continue without images
+      subjectImages = [];
+    } else {
+      console.error("Subject image lookup failed", error);
     }
-    console.error("Subject image lookup failed", error);
   }
 
   await options.emit({ type: "images", images: subjectImages });
 
   const registerSource = (candidate: SourceCandidate): SourceReference => {
-    const key = candidate.url.toLowerCase();
+    const key = normalizeUrl(candidate.url);
     const existing = sourceRegistry.get(key);
     if (existing) {
       return existing;
@@ -260,28 +348,111 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
     return reference;
   };
 
-  const plan = await generatePlan(trimmed, options.locale, options.signal, client, model);
-  await options.emit({ type: "plan", plan });
+  let plan: DeepResearchPlan;
+  let stepResults: StepResult[] = [];
+  let wasAborted = false;
 
-  const stepResults: StepResult[] = [];
-  for (const step of plan.steps) {
-    const result = await gatherEvidence(trimmed, step, options.locale, options.signal, client, model, registerSource);
-    stepResults.push(result);
-    await options.emit({ type: "search", step: result });
+  try {
+    plan = await generatePlan(trimmed, options.locale, options.signal, client, model);
+    await options.emit({ type: "plan", plan });
+
+    // Execute steps in parallel for better performance
+    const stepPromises = plan.steps.map(async (step) => {
+      const result = await gatherEvidence(trimmed, step, options.locale, options.signal, client, model, registerSource);
+      await options.emit({ type: "search", step: result });
+      return result;
+    });
+
+    const results = await Promise.allSettled(stepPromises);
+    stepResults = results
+      .filter((r): r is PromiseFulfilledResult<StepResult> => r.status === 'fulfilled')
+      .map((r) => r.value);
+
+    const finalReport = await synthesizeReport(
+      trimmed,
+      plan,
+      stepResults,
+      orderedSources,
+      options.locale,
+      options.signal,
+      client,
+      model,
+    );
+
+    await options.emit({ type: "final", report: finalReport, sources: orderedSources });
+  } catch (error) {
+    if ((error as DOMException)?.name === "AbortError") {
+      wasAborted = true;
+      // Generate partial report with data collected so far
+      if (stepResults.length > 0 && plan!) {
+        try {
+          // Set timeout for partial report generation (5 seconds)
+          const reportPromise = synthesizeReport(
+            trimmed,
+            plan,
+            stepResults,
+            orderedSources,
+            options.locale,
+            undefined, // Don't pass signal for partial report generation
+            client,
+            model,
+          );
+
+          const timeoutPromise = new Promise<string>((_, reject) => {
+            setTimeout(() => reject(new Error("Partial report generation timeout")), 5000);
+          });
+
+          const partialReport = await Promise.race([reportPromise, timeoutPromise]);
+          await options.emit({ type: "final", report: partialReport, sources: orderedSources });
+        } catch (reportError) {
+          console.error("Failed to generate partial report:", reportError);
+          // Emit whatever we have
+          await options.emit({
+            type: "final",
+            report: generateFallbackReport(trimmed, stepResults, options.locale),
+            sources: orderedSources
+          });
+        }
+      } else if (plan!) {
+        // If we have plan but no step results yet
+        await options.emit({
+          type: "final",
+          report: generatePlanOnlyReport(trimmed, plan, options.locale),
+          sources: orderedSources
+        });
+      }
+    } else {
+      throw error;
+    }
+  }
+}
+
+function generateFallbackReport(query: string, steps: StepResult[], locale: Locale): string {
+  if (locale === "ja") {
+    const findings = steps.map(step => {
+      const findingsText = step.findings.map(f => `- **${f.heading}**: ${f.insight}`).join("\n");
+      return `### ${step.title}\n\n${step.summary}\n\n${findingsText}`;
+    }).join("\n\n");
+
+    return `# ${query}\n\n## 調査結果（部分的）\n\n調査は途中で中止されましたが、以下の情報を収集しました。\n\n${findings}`;
   }
 
-  const finalReport = await synthesizeReport(
-    trimmed,
-    plan,
-    stepResults,
-    orderedSources,
-    options.locale,
-    options.signal,
-    client,
-    model,
-  );
+  const findings = steps.map(step => {
+    const findingsText = step.findings.map(f => `- **${f.heading}**: ${f.insight}`).join("\n");
+    return `### ${step.title}\n\n${step.summary}\n\n${findingsText}`;
+  }).join("\n\n");
 
-  await options.emit({ type: "final", report: finalReport, sources: orderedSources });
+  return `# ${query}\n\n## Research Results (Partial)\n\nThe research was stopped, but the following information was collected.\n\n${findings}`;
+}
+
+function generatePlanOnlyReport(query: string, plan: DeepResearchPlan, locale: Locale): string {
+  if (locale === "ja") {
+    const steps = plan.steps.map(step => `- **${step.title}**: ${step.query}`).join("\n");
+    return `# ${query}\n\n## 調査計画\n\n${plan.primaryGoal}\n\n${plan.rationale}\n\n### 計画されたステップ\n\n${steps}\n\n*調査は開始前に中止されました。*`;
+  }
+
+  const steps = plan.steps.map(step => `- **${step.title}**: ${step.query}`).join("\n");
+  return `# ${query}\n\n## Research Plan\n\n${plan.primaryGoal}\n\n${plan.rationale}\n\n### Planned Steps\n\n${steps}\n\n*Research was stopped before gathering evidence.*`;
 }
 
 async function generatePlan(
@@ -297,46 +468,67 @@ async function generatePlan(
   ) +
     `\n\nResearch question: ${query}`;
 
-  const response = await client.models.generateContent({
-    model,
-    contents: createContent(planPrompt),
-    config: {
-      ...(signal ? { abortSignal: signal } : {}),
-      temperature: 0.3,
-      maxOutputTokens: 1024,
-      responseMimeType: "application/json",
-      responseSchema: PLAN_SCHEMA,
-      systemInstruction: {
-        role: "system",
-        parts: [{ text: PLAN_SYSTEM_PROMPT }],
-      },
-    },
-  });
+  let lastError: Error | null = null;
+  const maxRetries = 2;
 
-  const text = response.text;
-  if (!text) {
-    throw new Error("Plan generation returned an empty response.");
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await withTimeout(
+        client.models.generateContent({
+          model,
+          contents: createContent(planPrompt),
+          config: {
+            ...(signal ? { abortSignal: signal } : {}),
+            temperature: 0.3,
+            maxOutputTokens: 1024,
+            responseMimeType: "application/json",
+            responseSchema: PLAN_SCHEMA,
+            systemInstruction: {
+              role: "system",
+              parts: [{ text: PLAN_SYSTEM_PROMPT }],
+            },
+          },
+        }),
+        30000, // 30 second timeout for plan generation
+        'Plan generation timed out',
+        signal,
+      );
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("Plan generation returned an empty response.");
+      }
+
+      const payload = parseJson<PlanPayload>(text, "plan");
+      const steps = (payload.steps ?? []).map((step, index) => ({
+        id: (step.id || `S${index + 1}`).trim(),
+        title: step.title.trim(),
+        query: step.query.trim(),
+        angle: step.angle.trim(),
+        deliverable: step.deliverable.trim(),
+      }));
+
+      if (steps.length === 0) {
+        throw new Error("Plan generation did not return any steps.");
+      }
+
+      return {
+        primaryGoal: payload.primaryGoal?.trim() ?? query,
+        rationale: payload.rationale?.trim() ?? "",
+        steps,
+        expectedInsights: payload.expectedInsights?.map((line) => line.trim()).filter(Boolean) ?? [],
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`Plan generation attempt ${attempt + 1} failed:`, lastError.message);
+
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
   }
 
-  const payload = parseJson<PlanPayload>(text, "plan");
-  const steps = (payload.steps ?? []).map((step, index) => ({
-    id: (step.id || `S${index + 1}`).trim(),
-    title: step.title.trim(),
-    query: step.query.trim(),
-    angle: step.angle.trim(),
-    deliverable: step.deliverable.trim(),
-  }));
-
-  if (steps.length === 0) {
-    throw new Error("Plan generation did not return any steps.");
-  }
-
-  return {
-    primaryGoal: payload.primaryGoal?.trim() ?? query,
-    rationale: payload.rationale?.trim() ?? "",
-    steps,
-    expectedInsights: payload.expectedInsights?.map((line) => line.trim()).filter(Boolean) ?? [],
-  };
+  throw lastError ?? new Error("Plan generation failed after all retries");
 }
 
 async function gatherEvidence(
@@ -358,35 +550,43 @@ async function gatherEvidence(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const response = await client.models.generateContent({
-        model,
-        contents: createContent(userPrompt),
-        config: {
-          ...(signal ? { abortSignal: signal } : {}),
-          temperature: 0.35,
-          topP: 0.9,
-          maxOutputTokens: 2048,
-          automaticFunctionCalling: {},
-          tools: [{ googleSearch: {} }],
-          systemInstruction: {
-            role: "system",
-            parts: [
-              {
-                text:
-                  `${EVIDENCE_SYSTEM_PROMPT}\nFormat your entire reply as minified JSON with the exact shape: {"summary": string, "findings": [{"heading": string, "insight": string, "evidence": string, "confidence"?: string, "sourceIds"?: number[]}]}.\nDo not include Markdown fences or any text before/after the JSON.\nUse sourceIds to reference 1-indexed citations emitted by the tool calls in the order they are returned.`,
-              },
-            ],
+      const response = await withTimeout(
+        client.models.generateContent({
+          model,
+          contents: createContent(userPrompt),
+          config: {
+            ...(signal ? { abortSignal: signal } : {}),
+            temperature: 0.35,
+            topP: 0.9,
+            maxOutputTokens: 2048,
+            automaticFunctionCalling: {},
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            responseSchema: EVIDENCE_SCHEMA,
+            systemInstruction: {
+              role: "system",
+              parts: [
+                {
+                  text:
+                    `${EVIDENCE_SYSTEM_PROMPT}\nUse sourceIds to reference 1-indexed citations emitted by the tool calls in the order they are returned.`,
+                },
+              ],
+            },
           },
-        },
-      });
+        }),
+        60000, // 60 second timeout for evidence gathering (includes web search)
+        `Evidence gathering timed out for step ${step.id}`,
+        signal,
+      );
 
       const text = response.text;
-      if (!text) {
+      if (!text || text.trim().length === 0) {
+        console.error(`[gatherEvidence] Empty response for step ${step.id}`);
         throw new Error(`Evidence generation for step ${step.id} returned an empty response.`);
       }
 
-      const jsonPayload = extractJsonObject(text, `evidence for step ${step.id}`);
-      const payload = parseJson<EvidencePayload>(jsonPayload, `evidence for step ${step.id}`);
+      // With responseSchema, the response should already be valid JSON
+      const payload = parseJson<EvidencePayload>(text, `evidence for step ${step.id}`);
       const candidate = response.candidates?.[0];
       const citations = extractCitations(candidate);
 
@@ -477,20 +677,41 @@ async function synthesizeReport(
   ) +
     `\n\nResearch question: ${query}\n\nPrimary goal: ${plan.primaryGoal}\nRationale: ${plan.rationale}\nExpected insights: ${plan.expectedInsights.join("; ")}\n\nPlan outline:\n${planOutline}\n\nFindings summary:\n${findingsOutline}\n\nSources catalog:\n${referencesCatalog}\n\nStructure the response with the following sections in order: Overview, Key Findings (bulleted), Contradictions, Open Questions, References. Ensure every factual claim is cited.`;
 
-  const response = await client.models.generateContent({
-    model,
-    contents: createContent(userPrompt),
-    config: {
-      ...(signal ? { abortSignal: signal } : {}),
-      temperature: 0.4,
-      topP: 0.9,
-      maxOutputTokens: 2048,
-      systemInstruction: {
-        role: "system",
-        parts: [{ text: FINAL_SYSTEM_PROMPT }],
-      },
-    },
-  });
+  let lastError: Error | null = null;
+  const maxRetries = 2;
 
-  return response.text ?? "";
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await withTimeout(
+        client.models.generateContent({
+          model,
+          contents: createContent(userPrompt),
+          config: {
+            ...(signal ? { abortSignal: signal } : {}),
+            temperature: 0.4,
+            topP: 0.9,
+            maxOutputTokens: 2048,
+            systemInstruction: {
+              role: "system",
+              parts: [{ text: FINAL_SYSTEM_PROMPT }],
+            },
+          },
+        }),
+        45000, // 45 second timeout for report synthesis
+        'Report synthesis timed out',
+        signal,
+      );
+
+      return response.text ?? "";
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`Report synthesis attempt ${attempt + 1} failed:`, lastError.message);
+
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Report synthesis failed after all retries");
 }

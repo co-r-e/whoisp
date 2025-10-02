@@ -136,7 +136,6 @@ export async function fetchSubjectImages(
   try {
     const response = await fetch(`https://www.googleapis.com/customsearch/v1?${params.toString()}`, {
       signal: options.signal,
-      timeout: 15000, // 15秒タイムアウト
     });
     if (!response.ok) {
       let errorBody: string | undefined;

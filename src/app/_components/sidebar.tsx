@@ -328,7 +328,7 @@ export default function Sidebar() {
             aria-haspopup="true"
             aria-expanded={isSettingsOpen}
           >
-            <GearIcon className="h-4 w-4" aria-hidden="true" />
+            <GearIcon className="h-4 w-4" aria-hidden={true} />
             <span>{isJapanese ? "設定" : "Settings"}</span>
           </button>
           {isSettingsOpen ? (
@@ -344,7 +344,7 @@ export default function Sidebar() {
                 role="menuitem"
                 aria-label={isJapanese ? "英語モードに切り替える" : "Switch to Japanese"}
               >
-                <GlobeIcon className="h-4 w-4" aria-hidden="true" />
+                <GlobeIcon className="h-4 w-4" aria-hidden={true} />
                 <span className="flex items-center gap-1">
                   <span className={!isJapanese ? "font-semibold" : "text-muted-foreground"}>EN</span>
                   <span className="text-muted-foreground">/</span>
@@ -356,7 +356,7 @@ export default function Sidebar() {
                 className="mt-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                 role="menuitem"
               >
-                <DocumentIcon className="h-4 w-4" aria-hidden="true" />
+                <DocumentIcon className="h-4 w-4" aria-hidden={true} />
                 <span>{isJapanese ? "利用規約" : "Terms of Use"}</span>
               </Link>
             </div>

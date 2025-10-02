@@ -62,8 +62,6 @@ type StreamEvent =
   | { type: "error"; message: string };
 
 type UiStrings = {
-  title: string;
-  lead: string;
   queryLabel: string;
   placeholder: string;
   submit: string;
@@ -158,19 +156,22 @@ const reportMarkdownComponents: Components = {
   hr: ({ node: _node, className, ...props }) => (
     <hr {...props} className={cx("my-4 border-muted", className)} />
   ),
-  code: ({ node: _node, inline, className, children, ...props }) => (
-    <code
-      {...props}
-      className={cx(
-        inline
-          ? "rounded bg-muted px-1 py-0.5 text-[0.8125rem]"
-          : "block rounded-md bg-muted/60 p-3 text-sm",
-        className,
-      )}
-    >
-      {children}
-    </code>
-  ),
+  code: ({ node: _node, className, children, ...props }) => {
+    const inline = !className?.includes('language-');
+    return (
+      <code
+        {...props}
+        className={cx(
+          inline
+            ? "rounded bg-muted px-1 py-0.5 text-[0.8125rem]"
+            : "block rounded-md bg-muted/60 p-3 text-sm",
+          className,
+        )}
+      >
+        {children}
+      </code>
+    );
+  },
 };
 
 export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchClientProps) {
@@ -201,13 +202,10 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
-    abortRef.current = null;
-    setIsRunning(false);
-    setRunningState(false);
-    setGlobalStatus(strings.idleStatus);
-    setImages([]);
-    setImagesStatus("idle");
-  }, [setGlobalStatus, setImages, setImagesStatus, setRunningState, strings.idleStatus]);
+    // Don't reset UI immediately - wait for partial report from server
+    const statusMessage = locale === "ja" ? "中止しています..." : "Stopping...";
+    setGlobalStatus(statusMessage);
+  }, [locale, setGlobalStatus]);
 
   const handleEvent = useCallback(
     (event: StreamEvent) => {
@@ -310,7 +308,8 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
         }
       } catch (err) {
         if ((err as DOMException)?.name === "AbortError") {
-          return;
+          // Re-throw to be handled by startResearch
+          throw err;
         }
         setError(toMessage(err));
         setIsRunning(false);
@@ -364,6 +363,13 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
         await consumeStream(response);
       } catch (err) {
         if ((err as DOMException)?.name === "AbortError") {
+          // Aborted - server will attempt to send partial report if already started
+          // The final event handler will update the status if report was received
+          // Otherwise, show idle status
+          setIsRunning(false);
+          setRunningState(false);
+          setGlobalStatus(strings.idleStatus);
+          abortRef.current = null;
           return;
         }
         setError(toMessage(err));

@@ -39,14 +39,30 @@ export async function POST(request: NextRequest) {
   const stream = new TransformStream();
   const writer = stream.writable.getWriter();
   const abortController = new AbortController();
+  let isClosed = false;
 
-  const write = (payload: unknown) => writer.write(encoder.encode(`${JSON.stringify(payload)}\n`));
-
-  const close = () => {
+  const write = async (payload: unknown) => {
+    if (isClosed) {
+      return;
+    }
     try {
-      writer.close();
-    } catch {
-      // ignore
+      await writer.write(encoder.encode(`${JSON.stringify(payload)}\n`));
+    } catch (error) {
+      if (!isClosed) {
+        console.error('[deep-research] Write error:', error);
+      }
+    }
+  };
+
+  const close = async () => {
+    if (isClosed) {
+      return;
+    }
+    isClosed = true;
+    try {
+      await writer.close();
+    } catch (error) {
+      // Stream may already be closed, ignore
     }
   };
 
@@ -62,15 +78,19 @@ export async function POST(request: NextRequest) {
       });
       await write({ type: "done" });
     } catch (error) {
-      await write({ type: "error", message: toErrorMessage(error) });
+      // Don't emit error for AbortError - runDeepResearch already handles partial results
+      if ((error as DOMException)?.name !== "AbortError") {
+        await write({ type: "error", message: toErrorMessage(error) });
+      }
     } finally {
-      close();
+      await close();
     }
   };
 
   request.signal.addEventListener("abort", () => {
+    // Signal abort to runDeepResearch, but don't close the stream yet
+    // Let runDeepResearch finish emitting partial results
     abortController.abort();
-    close();
   });
 
   void pump();

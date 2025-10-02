@@ -177,7 +177,6 @@ export async function fetchPersonImages(query: string, { locale, signal }: Fetch
       headers: {
         "User-Agent": buildUserAgent(),
       },
-      timeout: 10000, // 10秒タイムアウト
     });
 
     if (!response.ok) {
