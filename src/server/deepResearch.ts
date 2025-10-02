@@ -561,14 +561,12 @@ async function gatherEvidence(
             maxOutputTokens: 2048,
             automaticFunctionCalling: {},
             tools: [{ googleSearch: {} }],
-            responseMimeType: "application/json",
-            responseSchema: EVIDENCE_SCHEMA,
             systemInstruction: {
               role: "system",
               parts: [
                 {
                   text:
-                    `${EVIDENCE_SYSTEM_PROMPT}\nUse sourceIds to reference 1-indexed citations emitted by the tool calls in the order they are returned.`,
+                    `${EVIDENCE_SYSTEM_PROMPT}\nFormat your entire reply as valid JSON with the exact shape: {"summary": string, "findings": [{"heading": string, "insight": string, "evidence": string, "confidence"?: string, "sourceIds"?: number[]}]}.\nDo not include Markdown fences or any text before/after the JSON.\nUse sourceIds to reference 1-indexed citations emitted by the tool calls in the order they are returned.`,
                 },
               ],
             },
@@ -585,8 +583,8 @@ async function gatherEvidence(
         throw new Error(`Evidence generation for step ${step.id} returned an empty response.`);
       }
 
-      // With responseSchema, the response should already be valid JSON
-      const payload = parseJson<EvidencePayload>(text, `evidence for step ${step.id}`);
+      const jsonPayload = extractJsonObject(text, `evidence for step ${step.id}`);
+      const payload = parseJson<EvidencePayload>(jsonPayload, `evidence for step ${step.id}`);
       const candidate = response.candidates?.[0];
       const citations = extractCitations(candidate);
 

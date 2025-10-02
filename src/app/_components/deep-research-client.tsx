@@ -11,6 +11,7 @@ import {
 } from "./history-context";
 import { useResearchRun } from "./research-run-context";
 import type { DeepResearchImage } from "@/shared/deep-research-types";
+import { exportToWord } from "@/utils/exportToWord";
 
 type Locale = "en" | "ja";
 
@@ -431,6 +432,19 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
   const hasReport = Boolean(state.report);
   const hasSources = state.sources.length > 0;
 
+  const handleExportToWord = useCallback(async () => {
+    const query = searchParams.get("q") ?? "Research";
+
+    await exportToWord({
+      query,
+      plan: state.plan,
+      steps: orderedSteps,
+      report: state.report,
+      sources: state.sources,
+      locale,
+    });
+  }, [locale, orderedSteps, searchParams, state.plan, state.report, state.sources]);
+
   const planContent = hasPlanSteps
     ? planSteps.map((step) => (
         <article key={step.id} className="rounded-lg border bg-card p-4">
@@ -536,6 +550,34 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
           <p className="text-sm text-destructive">{strings.errorLabel}: {error}</p>
         </section>
       ) : null}
+
+      {(hasPlanSteps || hasEvidence || hasReport || hasSources) && (
+        <div className="flex justify-start">
+          <button
+            type="button"
+            onClick={handleExportToWord}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isRunning}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>{locale === "ja" ? "Wordで出力" : "Export to Word"}</span>
+          </button>
+        </div>
+      )}
 
       <div className="w-full overflow-x-auto">
         <div className="flex gap-6 min-w-[1280px] pb-4">
