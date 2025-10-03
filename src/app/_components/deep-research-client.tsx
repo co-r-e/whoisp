@@ -581,7 +581,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
 
       <div className="w-full overflow-x-auto">
         <div className="flex gap-6 min-w-[1280px] pb-4">
-          <section className="flex w-[320px] shrink-0 flex-col gap-3">
+          <section className="box-border flex w-[320px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
             <header className="space-y-2">
               <h2 className="text-base font-semibold">{strings.planHeading}</h2>
               {strings.planExpectation ? (
@@ -591,17 +591,17 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
             <div className="flex flex-col gap-3">{planContent}</div>
           </section>
 
-          <section className="flex w-[640px] shrink-0 flex-col gap-3">
+          <section className="box-border flex w-[640px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
             <h2 className="text-base font-semibold">{strings.evidenceHeading}</h2>
             <div className="flex flex-col gap-3">{evidenceContent}</div>
           </section>
 
-          <section className="flex w-[640px] shrink-0 flex-col gap-3">
+          <section className="box-border flex w-[640px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
             <h2 className="text-base font-semibold">{strings.reportHeading}</h2>
             {reportContent}
           </section>
 
-          <section className="flex w-[320px] shrink-0 flex-col gap-3">
+          <section className="box-border flex w-[320px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
             <h2 className="text-base font-semibold">{strings.sourcesHeading}</h2>
             {sourcesContent}
           </section>

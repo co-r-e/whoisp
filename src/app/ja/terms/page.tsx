@@ -10,7 +10,7 @@ export default function TermsJaPage() {
       <header className="border-b border-border pb-4">
         <h1 className="text-2xl font-semibold tracking-tight">利用規約と利用上の注意</h1>
         <p className="text-sm text-muted-foreground">
-          本プロトタイプの利用条件と安全にお使いいただくための注意事項をご確認ください。
+          本サービスの利用条件と安全にお使いいただくための注意事項をご確認ください。
         </p>
       </header>
       <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
@@ -21,13 +21,13 @@ export default function TermsJaPage() {
           権限のない個人情報や機微情報を送信しないでください。嫌がらせ、差別的行為、または他者に損害を与える目的の利用は禁止され、アクセス停止の対象となります。
         </p>
         <p>
-          本サービスは予告なく変更または終了する場合があります。データ保持は保証されず、メンテナンス時にセッションが削除される可能性があります。
+          本サービスは予告なく変更または終了する場合があります。専用のバックエンドデータベースは持たず、セッション情報はブラウザ内に保存されるため、メンテナンスやブラウザのリセット時に消去される可能性があります。
         </p>
       </section>
       <section id="usage-notes" className="space-y-4 rounded-lg border border-border bg-card p-4">
         <h2 className="text-base font-medium">利用上の注意・免責事項</h2>
         <p className="text-sm text-muted-foreground">
-          本アプリは、氏名・会社名・役職などの入力情報をもとに、検索エンジン/スクレイピングAPIを利用して Web上の公開情報を横断的に収集・整理するためのツールです。
+          本サービスは、氏名・会社名・役職などの入力情報をもとに、検索エンジン/スクレイピングAPIを利用して Web上の公開情報を横断的に収集・整理するためのツールです。
         </p>
         <div className="space-y-2">
           <h3 className="text-sm font-semibold">重要事項</h3>
@@ -54,7 +54,7 @@ export default function TermsJaPage() {
           </ul>
         </div>
         <p className="text-xs text-muted-foreground">
-          本アプリの利用により生じたいかなる損害に対しても、開発者は責任を負いません。
+          本サービスの利用により生じたいかなる損害に対しても、開発者は責任を負いません。
         </p>
       </section>
     </div>

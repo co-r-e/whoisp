@@ -6,7 +6,7 @@ import { ResearchRunProvider } from "./_components/research-run-context";
 
 export const metadata: Metadata = {
   title: "WhoisP",
-  description: "Retired research prototype documenting usage notes and history.",
+  description: "Research service documenting usage notes and history.",
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },

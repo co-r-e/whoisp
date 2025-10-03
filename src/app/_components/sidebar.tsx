@@ -39,7 +39,7 @@ export default function Sidebar() {
   const locale = getLocaleFromPath(pathname);
   const isJapanese = locale === "ja";
   const strings = isJapanese ? jaStrings : enStrings;
-  const { status, isRunning, cancel, images, imagesStatus, isImagesLoading } = useResearchRun();
+  const { status, isRunning, cancel, images, imagesStatus, isImagesLoading, setImages, setImagesStatus } = useResearchRun();
 
   const localeItems = useMemo(() => {
     return items.filter((item) => item.locale === locale);
@@ -115,6 +115,8 @@ export default function Sidebar() {
 
   function handleNavigate(path: string, id: string) {
     touchSession(id);
+    setImages([]);
+    setImagesStatus("idle");
     router.push(path);
     setIsSettingsOpen(false);
   }
@@ -359,6 +361,29 @@ export default function Sidebar() {
                 <DocumentIcon className="h-4 w-4" aria-hidden={true} />
                 <span>{isJapanese ? "利用規約" : "Terms of Use"}</span>
               </Link>
+              <Link
+                href="https://co-r-e.net"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                role="menuitem"
+              >
+                <BuildingIcon className="h-4 w-4" aria-hidden={true} />
+                <span>Company</span>
+              </Link>
+              <Link
+                href="https://co-r-e.net/contact"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                role="menuitem"
+              >
+                <EnvelopeIcon className="h-4 w-4" aria-hidden={true} />
+                <span>Contact</span>
+              </Link>
+              <p className="mt-3 px-3 text-[10px] text-muted-foreground/80">
+                ©CORe Inc. All rights reserved.
+              </p>
             </div>
           ) : null}
         </div>
@@ -425,6 +450,44 @@ function DocumentIcon(props: IconProps) {
       <path d="M12 16h4" />
       <path d="M8 11h.01" />
       <path d="M8 16h.01" />
+    </svg>
+  );
+}
+
+function BuildingIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M3 21V7a2 2 0 0 1 2-2h4V3h6v2h4a2 2 0 0 1 2 2v14" />
+      <path d="M9 21V9" />
+      <path d="M15 21V9" />
+      <path d="M9 13h6" />
+      <path d="M9 17h6" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+function EnvelopeIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
     </svg>
   );
 }
