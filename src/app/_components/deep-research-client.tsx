@@ -3,64 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { usePathname, useSearchParams } from "next/navigation";
-
-import {
-  type HistoryLocale,
-  useHistoryContext,
-} from "./history-context";
+import { useSearchParams } from "next/navigation";
 import { useResearchRun } from "./research-run-context";
-import type { DeepResearchImage } from "@/shared/deep-research-types";
+import type {
+  DeepResearchImage,
+  DeepResearchPlan,
+  DeepResearchStreamEvent,
+  Locale,
+  SourceReference,
+  StepResult,
+} from "@/shared/deep-research-types";
 import { exportToWord } from "@/utils/exportToWord";
-
-type Locale = "en" | "ja";
-
-type SourceReference = {
-  id: string;
-  url: string;
-  title: string;
-  domain?: string;
-};
-
-type StepFinding = {
-  heading: string;
-  insight: string;
-  evidence: string;
-  confidence?: string;
-  sources: SourceReference[];
-};
-
-type StepResult = {
-  stepId: string;
-  title: string;
-  summary: string;
-  queries: string[];
-  findings: StepFinding[];
-  sources: SourceReference[];
-};
-
-type DeepResearchPlan = {
-  primaryGoal: string;
-  rationale: string;
-  steps: Array<{
-    id: string;
-    title: string;
-    query: string;
-    angle: string;
-    deliverable: string;
-  }>;
-  expectedInsights: string[];
-};
-
-type StreamEvent =
-  | { type: "images"; images: DeepResearchImage[] }
-  | { type: "status"; status: string }
-  | { type: "plan"; plan: DeepResearchPlan }
-  | { type: "search"; step: StepResult }
-  | { type: "analysis"; notes: string }
-  | { type: "final"; report: string; sources: SourceReference[] }
-  | { type: "done" }
-  | { type: "error"; message: string };
 
 type UiStrings = {
   queryLabel: string;
@@ -88,7 +41,6 @@ type UiStrings = {
 type DeepResearchClientProps = {
   locale: Locale;
   strings: UiStrings;
-  sessionId?: string;
 };
 
 type ResearchState = {
@@ -175,31 +127,15 @@ const reportMarkdownComponents: Components = {
   },
 };
 
-export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchClientProps) {
+export function DeepResearchClient({ locale, strings }: DeepResearchClientProps) {
   const [state, setState] = useState(initialState);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastStartedQuery, setLastStartedQuery] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
-  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { ensureSession, touchSession, renameIfUntitled, getDefaultTitle } = useHistoryContext();
   const { setStatus: setGlobalStatus, setRunningState, setImages, setImagesStatus } = useResearchRun();
-
-  useEffect(() => {
-    if (!sessionId) return;
-    const historyLocale = locale as HistoryLocale;
-    ensureSession({
-      id: sessionId,
-      title: getDefaultTitle(historyLocale),
-      path: pathname,
-      locale: historyLocale,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    touchSession(sessionId);
-  }, [ensureSession, getDefaultTitle, locale, pathname, sessionId, touchSession]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -209,7 +145,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
   }, [locale, setGlobalStatus]);
 
   const handleEvent = useCallback(
-    (event: StreamEvent) => {
+    (event: DeepResearchStreamEvent) => {
       switch (event.type) {
         case "images":
           setImages(event.images);
@@ -268,7 +204,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
       const trimmed = line.trim();
       if (!trimmed) return;
       try {
-        const parsed = JSON.parse(trimmed) as StreamEvent;
+        const parsed = JSON.parse(trimmed) as DeepResearchStreamEvent;
         handleEvent(parsed);
       } catch (err) {
         setError(toMessage(err));
@@ -335,11 +271,6 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
       setImages([]);
       setImagesStatus("loading");
 
-      if (sessionId) {
-        renameIfUntitled(sessionId, currentQuery);
-        touchSession(sessionId);
-      }
-
       try {
         const response = await fetch("/api/deep-research", {
           method: "POST",
@@ -386,21 +317,14 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
       consumeStream,
       handleCancel,
       locale,
-      renameIfUntitled,
-      sessionId,
       setGlobalStatus,
       setImages,
       setImagesStatus,
       setRunningState,
       strings.idleStatus,
       strings.runningStatus,
-      touchSession,
     ],
   );
-
-  useEffect(() => {
-    setLastStartedQuery(null);
-  }, [sessionId]);
 
   useEffect(() => {
     setRunningState(isRunning, isRunning ? handleCancel : undefined);
@@ -411,16 +335,20 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
   }, [setGlobalStatus, strings.idleStatus]);
 
   useEffect(() => {
-    if (!sessionId) return;
     const paramValue = searchParams.get("q");
     const trimmed = paramValue?.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      if (lastStartedQuery !== null) {
+        setLastStartedQuery(null);
+      }
+      return;
+    }
     if (isRunning) return;
     if (lastStartedQuery === trimmed) return;
 
     setLastStartedQuery(trimmed);
     void startResearch(trimmed);
-  }, [isRunning, lastStartedQuery, searchParams, sessionId, startResearch]);
+  }, [isRunning, lastStartedQuery, searchParams, startResearch]);
 
   const activePlan = state.plan;
   const planSteps = activePlan?.steps ?? [];
@@ -447,7 +375,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
 
   const planContent = hasPlanSteps
     ? planSteps.map((step) => (
-        <article key={step.id} className="rounded-lg border bg-card p-4">
+        <article key={step.id} className="rounded-lg border border-border bg-card p-4">
           <div className="text-xs uppercase tracking-wide text-muted-foreground">
             <span>{step.id}</span>
           </div>
@@ -465,7 +393,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
 
   const evidenceContent = hasEvidence
     ? orderedSteps.map((step) => (
-        <article key={step.stepId} className="rounded-lg border bg-card p-4">
+        <article key={step.stepId} className="rounded-lg border border-border bg-card p-4">
           <header className="flex flex-col gap-1">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">{step.stepId}</span>
             <h3 className="text-lg font-semibold">{step.title}</h3>
@@ -509,7 +437,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
       );
 
   const reportContent = hasReport ? (
-    <article className="rounded-lg border bg-card p-4">
+    <article className="rounded-lg border border-border bg-card p-4">
       <div className="space-y-3 text-sm leading-relaxed text-foreground">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={reportMarkdownComponents}>
           {state.report ?? ""}
@@ -523,7 +451,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
   const sourcesContent = hasSources ? (
     <ol className="space-y-2 text-sm">
       {state.sources.map((source) => (
-        <li key={source.id} className="rounded-md border bg-card/50 p-3">
+        <li key={source.id} className="rounded-md border border-border bg-card/50 p-3">
           <p className="font-medium">[{source.id}] {source.title}</p>
           {source.domain ? (
             <p className="text-xs text-muted-foreground">{source.domain}</p>
@@ -581,7 +509,7 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
 
       <div className="w-full overflow-x-auto">
         <div className="flex gap-6 min-w-[1280px] pb-4">
-          <section className="box-border flex w-[320px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
+          <section className="box-border flex w-[320px] shrink-0 flex-col gap-3 rounded-xl bg-card p-4">
             <header className="space-y-2">
               <h2 className="text-base font-semibold">{strings.planHeading}</h2>
               {strings.planExpectation ? (
@@ -591,17 +519,17 @@ export function DeepResearchClient({ locale, strings, sessionId }: DeepResearchC
             <div className="flex flex-col gap-3">{planContent}</div>
           </section>
 
-          <section className="box-border flex w-[640px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
+          <section className="box-border flex w-[640px] shrink-0 flex-col gap-3 rounded-xl bg-card p-4">
             <h2 className="text-base font-semibold">{strings.evidenceHeading}</h2>
             <div className="flex flex-col gap-3">{evidenceContent}</div>
           </section>
 
-          <section className="box-border flex w-[640px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
+          <section className="box-border flex w-[640px] shrink-0 flex-col gap-3 rounded-xl bg-card p-4">
             <h2 className="text-base font-semibold">{strings.reportHeading}</h2>
             {reportContent}
           </section>
 
-          <section className="box-border flex w-[320px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
+          <section className="box-border flex w-[320px] shrink-0 flex-col gap-3 rounded-xl bg-card p-4">
             <h2 className="text-base font-semibold">{strings.sourcesHeading}</h2>
             {sourcesContent}
           </section>

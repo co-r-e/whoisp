@@ -45,3 +45,7 @@ npm run dev
 - The Japanese landing page (`/ja`) surfaces the same experience with localized copy.
 
 For legal and privacy guidance, open **Usage notes & disclaimer** from the navigation bar or visit `/disclaimer` directly.
+
+## License
+
+WhoisP is released under the MIT License. See [LICENSE](./LICENSE) for the full terms. Copyright (c) 2025 CORe Inc.

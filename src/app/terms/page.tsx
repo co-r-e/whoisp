@@ -17,7 +17,9 @@ export default function TermsPage() {
         <p>
           By using this service you agree to conduct research responsibly, respect privacy, and comply with
           all applicable laws and third-party service terms. Outputs are provided “as is” with no warranty;
-          you remain responsible for independently validating any insights before acting on them.
+          you remain responsible for independently validating any insights before acting on them. Because the
+          platform surfaces material from external websites that can be outdated, incomplete, or incorrect, we
+          do not guarantee the accuracy of any information returned.
         </p>
         <p>
           Do not upload sensitive or personal data you lack rights to process. Abuse, harassment, discriminatory
@@ -40,6 +42,7 @@ export default function TermsPage() {
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
             <li>Only public information is retrieved. Private or paywalled content is not accessed.</li>
             <li>Accuracy and completeness are not guaranteed; always verify findings independently.</li>
+            <li>Fetched sources may contain errors; aggregated results inherit those inaccuracies and are not warranted as correct.</li>
             <li>Respect privacy and the terms of each source service and use the tool for appropriate purposes.</li>
             <li>Use of external scraping APIs must comply with the providers’ policies.</li>
           </ul>

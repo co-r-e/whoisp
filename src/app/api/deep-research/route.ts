@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 
 import { runDeepResearch } from "@/server/deepResearch";
+import type { DeepResearchStreamEvent, Locale } from "@/shared/deep-research-types";
 
 export const runtime = "nodejs";
 
 const encoder = new TextEncoder();
 
-function normalizeLocale(locale: unknown): "en" | "ja" {
+function normalizeLocale(locale: unknown): Locale {
   if (locale === "ja") return "ja";
   return "en";
 }
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
   const abortController = new AbortController();
   let isClosed = false;
 
-  const write = async (payload: unknown) => {
+  const write = async (payload: DeepResearchStreamEvent) => {
     if (isClosed) {
       return;
     }

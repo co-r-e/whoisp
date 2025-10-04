@@ -3,60 +3,21 @@ import type { Candidate, Content, GroundingChunk } from "@google/genai";
 import type { GoogleGenAI } from "@google/genai/node";
 import { fetchSubjectImages } from "./fetchSubjectImages";
 import { getGeminiClient } from "./geminiClient";
-import type { DeepResearchImage } from "@/shared/deep-research-types";
-
-type Locale = "en" | "ja";
-
-type PlanStep = {
-  id: string;
-  title: string;
-  query: string;
-  angle: string;
-  deliverable: string;
-};
-
-type DeepResearchPlan = {
-  primaryGoal: string;
-  rationale: string;
-  steps: PlanStep[];
-  expectedInsights: string[];
-};
-
-type SourceReference = {
-  id: string;
-  url: string;
-  title: string;
-  domain?: string;
-};
-
-type StepFinding = {
-  heading: string;
-  insight: string;
-  evidence: string;
-  confidence?: string;
-  sources: SourceReference[];
-};
-
-type StepResult = {
-  stepId: string;
-  title: string;
-  summary: string;
-  queries: string[];
-  findings: StepFinding[];
-  sources: SourceReference[];
-};
-
-type DeepResearchEvent =
-  | { type: "images"; images: DeepResearchImage[] }
-  | { type: "plan"; plan: DeepResearchPlan }
-  | { type: "search"; step: StepResult }
-  | { type: "analysis"; notes: string }
-  | { type: "final"; report: string; sources: SourceReference[] };
+import type {
+  DeepResearchImage,
+  DeepResearchPlan,
+  DeepResearchPlanStep,
+  DeepResearchServerEvent,
+  Locale,
+  SourceReference,
+  StepFinding,
+  StepResult,
+} from "@/shared/deep-research-types";
 
 type RunOptions = {
   locale: Locale;
   signal?: AbortSignal;
-  emit(event: DeepResearchEvent): Promise<void> | void;
+  emit(event: DeepResearchServerEvent): Promise<void> | void;
 };
 
 type SourceCandidate = {
@@ -348,9 +309,8 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
     return reference;
   };
 
-  let plan: DeepResearchPlan;
+  let plan: DeepResearchPlan | null = null;
   let stepResults: StepResult[] = [];
-  let wasAborted = false;
 
   try {
     plan = await generatePlan(trimmed, options.locale, options.signal, client, model);
@@ -382,9 +342,8 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
     await options.emit({ type: "final", report: finalReport, sources: orderedSources });
   } catch (error) {
     if ((error as DOMException)?.name === "AbortError") {
-      wasAborted = true;
       // Generate partial report with data collected so far
-      if (stepResults.length > 0 && plan!) {
+      if (stepResults.length > 0 && plan) {
         try {
           // Set timeout for partial report generation (5 seconds)
           const reportPromise = synthesizeReport(
@@ -413,7 +372,7 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
             sources: orderedSources
           });
         }
-      } else if (plan!) {
+      } else if (plan) {
         // If we have plan but no step results yet
         await options.emit({
           type: "final",
@@ -533,7 +492,7 @@ async function generatePlan(
 
 async function gatherEvidence(
   query: string,
-  step: PlanStep,
+  step: DeepResearchPlanStep,
   locale: Locale,
   signal: AbortSignal | undefined,
   client: GoogleGenAI,

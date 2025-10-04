@@ -15,43 +15,12 @@ import {
   ShadingType,
 } from "docx";
 import { saveAs } from "file-saver";
-
-type SourceReference = {
-  id: string;
-  url: string;
-  title: string;
-  domain?: string;
-};
-
-type StepFinding = {
-  heading: string;
-  insight: string;
-  evidence: string;
-  confidence?: string;
-  sources: SourceReference[];
-};
-
-type StepResult = {
-  stepId: string;
-  title: string;
-  summary: string;
-  queries: string[];
-  findings: StepFinding[];
-  sources: SourceReference[];
-};
-
-type DeepResearchPlan = {
-  primaryGoal: string;
-  rationale: string;
-  steps: Array<{
-    id: string;
-    title: string;
-    query: string;
-    angle: string;
-    deliverable: string;
-  }>;
-  expectedInsights: string[];
-};
+import type {
+  DeepResearchPlan,
+  Locale,
+  SourceReference,
+  StepResult,
+} from "@/shared/deep-research-types";
 
 type ExportData = {
   query: string;
@@ -59,7 +28,7 @@ type ExportData = {
   steps: StepResult[];
   report: string | null;
   sources: SourceReference[];
-  locale: "en" | "ja";
+  locale: Locale;
 };
 
 // Parse markdown to create Word paragraphs
