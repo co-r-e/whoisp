@@ -27,8 +27,7 @@ export default function TermsPage() {
         </p>
         <p>
           The service may change or be discontinued at any time without notice. Data is not persisted in a
-          backend database; session history resides locally in your browser and may be cleared during
-          maintenance or browser resets.
+          backend database and investigation inputs are not stored once a page is refreshed or closed.
         </p>
       </section>
       <section id="usage-notes" className="space-y-4 rounded-lg border border-border bg-card p-4">
@@ -44,7 +43,6 @@ export default function TermsPage() {
             <li>Accuracy and completeness are not guaranteed; always verify findings independently.</li>
             <li>Fetched sources may contain errors; aggregated results inherit those inaccuracies and are not warranted as correct.</li>
             <li>Respect privacy and the terms of each source service and use the tool for appropriate purposes.</li>
-            <li>Use of external scraping APIs must comply with the providers’ policies.</li>
           </ul>
         </div>
         <div className="space-y-2">
