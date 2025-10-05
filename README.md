@@ -1,3 +1,7 @@
+![WhoisP logo](public/logo.svg)
+
+[![Watch the WhoisP demo on YouTube](https://img.youtube.com/vi/vG_wtOb57c8/hqdefault.jpg)](https://youtu.be/vG_wtOb57c8 "Watch the WhoisP demo on YouTube")
+
 # WhoisP
 
 WhoisP is a Next.js application that now ships with a Gemini-powered “DeepResearch” workflow. Users can submit an investigative query and receive a multi-step research plan, streamed evidence summaries with grounded citations, and a final synthesis report.
