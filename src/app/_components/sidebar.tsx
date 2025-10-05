@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { enStrings, jaStrings } from "./deep-research-strings";
 import { useResearchRun } from "./research-run-context";
+import { Logo } from "./logo";
 
 type Locale = "en" | "ja";
 
@@ -89,15 +90,8 @@ export default function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex h-full flex-col">
         <div className="space-y-4 px-4 pb-5 pt-6">
-          <Link href={isJapanese ? "/ja" : "/"} className="flex items-center justify-center">
-            <Image
-              src="/logo.svg"
-              alt="WhoisP logo"
-              width={160}
-              height={32}
-              className="h-8 w-auto"
-              priority
-            />
+          <Link href={isJapanese ? "/ja" : "/"} className="flex items-center justify-center" aria-label="WhoisP home">
+            <Logo isRunning={isRunning} />
           </Link>
           <form className="space-y-2" onSubmit={handleQuerySubmit}>
             <textarea

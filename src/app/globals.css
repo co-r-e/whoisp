@@ -126,3 +126,28 @@
 nextjs-portal {
   display: none !important;
 }
+
+.logo-bird {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.logo-bird--running {
+  animation: logo-bird-sway 1.6s ease-in-out infinite;
+}
+
+@keyframes logo-bird-sway {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-bird--running {
+    animation: none;
+  }
+}
