@@ -1,6 +1,6 @@
 import { GoogleGenAI, type GoogleGenAIOptions } from "@google/genai/node";
 
-const DEFAULT_MODEL = "gemini-2.5-flash-lite";
+const DEFAULT_MODEL = "gemini-flash-latest";
 
 type GeminiClientBundle = {
   client: GoogleGenAI;
