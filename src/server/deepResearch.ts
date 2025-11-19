@@ -1,5 +1,11 @@
 import JSON5 from "json5";
-import { ThinkingLevel, type Candidate, type Content, type GroundingChunk } from "@google/genai";
+import {
+  ThinkingLevel,
+  type Candidate,
+  type Content,
+  type GenerateContentConfig,
+  type GroundingChunk,
+} from "@google/genai";
 import type { GoogleGenAI } from "@google/genai/node";
 import { fetchSubjectImages } from "./fetchSubjectImages";
 import { getGeminiClient } from "./geminiClient";
@@ -113,6 +119,8 @@ const EVIDENCE_SYSTEM_PROMPT = `For the assigned sub-query, run targeted web sea
 const FINAL_SYSTEM_PROMPT = `Integrate the vetted findings into a concise report that cites sources, highlights tensions, and surfaces next questions while weighting newer information more heavily.`;
 
 const THINKING_CONFIG = { thinkingLevel: ThinkingLevel.HIGH } as const;
+const THINKING_ERROR_PATTERN = /Thinking level is not supported/i;
+const THINKING_UNSUPPORTED_MODELS = new Set<string>();
 
 const TODAY = new Date().toISOString().split('T')[0];
 
@@ -130,6 +138,67 @@ function createContent(text: string): Content[] {
       parts: [{ text }],
     },
   ];
+}
+
+type AdaptiveThinkingRequest = {
+  client: GoogleGenAI;
+  model: string;
+  contents: Content[];
+  config: GenerateContentConfig;
+  enableThinking?: boolean;
+};
+
+async function generateContentWithAdaptiveThinking({
+  client,
+  model,
+  contents,
+  config,
+  enableThinking = true,
+}: AdaptiveThinkingRequest) {
+  if (!enableThinking || THINKING_UNSUPPORTED_MODELS.has(model)) {
+    return client.models.generateContent({
+      model,
+      contents,
+      config,
+    });
+  }
+
+  try {
+    return await client.models.generateContent({
+      model,
+      contents,
+      config: {
+        ...config,
+        thinkingConfig: THINKING_CONFIG,
+      },
+    });
+  } catch (error) {
+    if (isThinkingUnsupportedError(error)) {
+      THINKING_UNSUPPORTED_MODELS.add(model);
+      console.warn(
+        `[deepResearch] Thinking level unsupported for model "${model}". Retrying without thinkingConfig.`,
+      );
+      return client.models.generateContent({
+        model,
+        contents,
+        config,
+      });
+    }
+    throw error;
+  }
+}
+
+function isThinkingUnsupportedError(error: unknown): boolean {
+  if (!error) {
+    return false;
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : (error as { message?: string })?.message;
+  return typeof message === "string" && THINKING_ERROR_PATTERN.test(message);
 }
 
 function parseJson<T>(raw: string, context: string): T {
@@ -435,7 +504,8 @@ async function generatePlan(
   for (let attempt = 0; attempt <= RETRY.MAX_ATTEMPTS; attempt++) {
     try {
       const response = await withTimeout(
-        client.models.generateContent({
+        generateContentWithAdaptiveThinking({
+          client,
           model,
           contents: createContent(planPrompt),
           config: {
@@ -443,7 +513,6 @@ async function generatePlan(
             maxOutputTokens: 1024,
             responseMimeType: "application/json",
             responseSchema: PLAN_SCHEMA,
-            thinkingConfig: THINKING_CONFIG,
             systemInstruction: {
               role: "system",
               parts: [{ text: PLAN_SYSTEM_PROMPT }],
@@ -511,14 +580,14 @@ async function gatherEvidence(
   for (let attempt = 0; attempt <= RETRY.MAX_ATTEMPTS; attempt++) {
     try {
       const response = await withTimeout(
-        client.models.generateContent({
+        generateContentWithAdaptiveThinking({
+          client,
           model,
           contents: createContent(userPrompt),
           config: {
             ...(signal ? { abortSignal: signal } : {}),
             topP: 0.9,
             maxOutputTokens: 2048,
-            thinkingConfig: THINKING_CONFIG,
             automaticFunctionCalling: {},
             tools: [{ googleSearch: {} }],
             systemInstruction: {
@@ -640,14 +709,14 @@ async function synthesizeReport(
   for (let attempt = 0; attempt <= RETRY.MAX_ATTEMPTS; attempt++) {
     try {
       const response = await withTimeout(
-        client.models.generateContent({
+        generateContentWithAdaptiveThinking({
+          client,
           model,
           contents: createContent(userPrompt),
           config: {
             ...(signal ? { abortSignal: signal } : {}),
             topP: 0.9,
             maxOutputTokens: 2048,
-            thinkingConfig: THINKING_CONFIG,
             systemInstruction: {
               role: "system",
               parts: [{ text: FINAL_SYSTEM_PROMPT }],
