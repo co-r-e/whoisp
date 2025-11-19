@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 import { runDeepResearch } from "@/server/deepResearch";
 import type { DeepResearchStreamEvent, Locale } from "@/shared/deep-research-types";
+import { toErrorMessage } from "@/shared/utils";
 
 export const runtime = "nodejs";
 
@@ -10,16 +11,6 @@ const encoder = new TextEncoder();
 function normalizeLocale(locale: unknown): Locale {
   if (locale === "ja") return "ja";
   return "en";
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  return "Unexpected error";
 }
 
 export async function POST(request: NextRequest) {

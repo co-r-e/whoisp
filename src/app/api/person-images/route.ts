@@ -2,21 +2,12 @@ import { NextRequest } from "next/server";
 
 import { fetchPersonImages } from "@/server/fetchPersonImages";
 import type { AppLocale } from "@/shared/person-images";
+import { toErrorMessage } from "@/shared/utils";
 
 export const runtime = "nodejs";
 
 function normalizeLocale(locale: unknown): AppLocale {
   return locale === "ja" ? "ja" : "en";
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  return "Unexpected error";
 }
 
 function detectStatus(error: Error): number {

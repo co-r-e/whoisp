@@ -548,5 +548,3 @@ function toMessage(error: unknown): string {
   }
   return "Unexpected error";
 }
-
-export default DeepResearchClient;

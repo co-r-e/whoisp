@@ -1,8 +1,9 @@
 import JSON5 from "json5";
-import type { Candidate, Content, GroundingChunk } from "@google/genai";
+import { ThinkingLevel, type Candidate, type Content, type GroundingChunk } from "@google/genai";
 import type { GoogleGenAI } from "@google/genai/node";
 import { fetchSubjectImages } from "./fetchSubjectImages";
 import { getGeminiClient } from "./geminiClient";
+import { TIMEOUT, RETRY } from "@/shared/constants";
 import type {
   DeepResearchImage,
   DeepResearchPlan,
@@ -105,11 +106,13 @@ const EVIDENCE_SCHEMA = {
   },
 } as const;
 
-const PLAN_SYSTEM_PROMPT = `You are a senior research strategist. Design concise, sequential investigation plans that break complex questions into focused web research actions. Each step should have a unique id, specific search intent, and a deliverable that advances the overall objective.`;
+const PLAN_SYSTEM_PROMPT = `Plan 3-5 sequential web research steps with ids, clear intents, and concrete deliverables. Each step must cover a distinct angle that moves the investigation forward.`;
 
-const EVIDENCE_SYSTEM_PROMPT = `You are a meticulous research analyst. For each assigned sub-query, run targeted web searches, extract only the most relevant facts, and return structured findings with explicit evidence. Do not invent citations; rely solely on the retrieved material. Prioritize newer, more recent information over older data when evaluating sources and findings.`;
+const EVIDENCE_SYSTEM_PROMPT = `For the assigned sub-query, run targeted web searches, capture only verifiable facts, and reply with structured findings plus citations. Prefer the newest trustworthy information and never invent sources.`;
 
-const FINAL_SYSTEM_PROMPT = `You are the lead analyst preparing the final deliverable for an exhaustive research sprint. Integrate the vetted findings, highlight tensions in the evidence, and surface the most important next questions. Prioritize and give more weight to newer, more recent information over older data when synthesizing the report.`;
+const FINAL_SYSTEM_PROMPT = `Integrate the vetted findings into a concise report that cites sources, highlights tensions, and surfaces next questions while weighting newer information more heavily.`;
+
+const THINKING_CONFIG = { thinkingLevel: ThinkingLevel.HIGH } as const;
 
 const TODAY = new Date().toISOString().split('T')[0];
 
@@ -358,7 +361,7 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
           );
 
           const timeoutPromise = new Promise<string>((_, reject) => {
-            setTimeout(() => reject(new Error("Partial report generation timeout")), 5000);
+            setTimeout(() => reject(new Error("Partial report generation timeout")), TIMEOUT.PARTIAL_REPORT);
           });
 
           const partialReport = await Promise.race([reportPromise, timeoutPromise]);
@@ -428,9 +431,8 @@ async function generatePlan(
     `\n\nResearch question: ${query}`;
 
   let lastError: Error | null = null;
-  const maxRetries = 2;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= RETRY.MAX_ATTEMPTS; attempt++) {
     try {
       const response = await withTimeout(
         client.models.generateContent({
@@ -438,17 +440,17 @@ async function generatePlan(
           contents: createContent(planPrompt),
           config: {
             ...(signal ? { abortSignal: signal } : {}),
-            temperature: 0.3,
             maxOutputTokens: 1024,
             responseMimeType: "application/json",
             responseSchema: PLAN_SCHEMA,
+            thinkingConfig: THINKING_CONFIG,
             systemInstruction: {
               role: "system",
               parts: [{ text: PLAN_SYSTEM_PROMPT }],
             },
           },
         }),
-        30000, // 30 second timeout for plan generation
+        TIMEOUT.PLAN_GENERATION,
         'Plan generation timed out',
         signal,
       );
@@ -481,8 +483,8 @@ async function generatePlan(
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Plan generation attempt ${attempt + 1} failed:`, lastError.message);
 
-      if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+      if (attempt < RETRY.MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY.BASE_DELAY_MS * (attempt + 1)));
       }
     }
   }
@@ -505,9 +507,8 @@ async function gatherEvidence(
   );
 
   let lastError: Error | null = null;
-  const maxRetries = 2;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= RETRY.MAX_ATTEMPTS; attempt++) {
     try {
       const response = await withTimeout(
         client.models.generateContent({
@@ -515,9 +516,9 @@ async function gatherEvidence(
           contents: createContent(userPrompt),
           config: {
             ...(signal ? { abortSignal: signal } : {}),
-            temperature: 0.35,
             topP: 0.9,
             maxOutputTokens: 2048,
+            thinkingConfig: THINKING_CONFIG,
             automaticFunctionCalling: {},
             tools: [{ googleSearch: {} }],
             systemInstruction: {
@@ -531,7 +532,7 @@ async function gatherEvidence(
             },
           },
         }),
-        60000, // 60 second timeout for evidence gathering (includes web search)
+        TIMEOUT.EVIDENCE_GATHERING,
         `Evidence gathering timed out for step ${step.id}`,
         signal,
       );
@@ -582,8 +583,8 @@ async function gatherEvidence(
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Attempt ${attempt + 1} failed for step ${step.id}:`, lastError.message);
 
-      if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+      if (attempt < RETRY.MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY.BASE_DELAY_MS * (attempt + 1)));
       }
     }
   }
@@ -593,7 +594,7 @@ async function gatherEvidence(
   return {
     stepId: step.id,
     title: step.title,
-    summary: `Evidence collection failed after ${maxRetries + 1} attempts: ${lastError?.message ?? "Unknown error"}`,
+    summary: `Evidence collection failed after ${RETRY.MAX_ATTEMPTS + 1} attempts: ${lastError?.message ?? "Unknown error"}`,
     queries: [],
     findings: [],
     sources: [],
@@ -635,9 +636,8 @@ async function synthesizeReport(
     `\n\nResearch question: ${query}\n\nPrimary goal: ${plan.primaryGoal}\nRationale: ${plan.rationale}\nExpected insights: ${plan.expectedInsights.join("; ")}\n\nPlan outline:\n${planOutline}\n\nFindings summary:\n${findingsOutline}\n\nSources catalog:\n${referencesCatalog}\n\nStructure the response with the following sections in order: Overview, Key Findings (bulleted), Contradictions, Open Questions, References. Ensure every factual claim is cited.`;
 
   let lastError: Error | null = null;
-  const maxRetries = 2;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= RETRY.MAX_ATTEMPTS; attempt++) {
     try {
       const response = await withTimeout(
         client.models.generateContent({
@@ -645,16 +645,16 @@ async function synthesizeReport(
           contents: createContent(userPrompt),
           config: {
             ...(signal ? { abortSignal: signal } : {}),
-            temperature: 0.4,
             topP: 0.9,
             maxOutputTokens: 2048,
+            thinkingConfig: THINKING_CONFIG,
             systemInstruction: {
               role: "system",
               parts: [{ text: FINAL_SYSTEM_PROMPT }],
             },
           },
         }),
-        45000, // 45 second timeout for report synthesis
+        TIMEOUT.REPORT_SYNTHESIS,
         'Report synthesis timed out',
         signal,
       );
@@ -664,8 +664,8 @@ async function synthesizeReport(
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Report synthesis attempt ${attempt + 1} failed:`, lastError.message);
 
-      if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+      if (attempt < RETRY.MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY.BASE_DELAY_MS * (attempt + 1)));
       }
     }
   }

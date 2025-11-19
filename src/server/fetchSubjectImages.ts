@@ -2,6 +2,8 @@ import type { Content } from "@google/genai";
 
 import { getGeminiClient } from "./geminiClient";
 import { fetchPersonImages } from "./fetchPersonImages";
+import { getEnv } from "@/shared/utils";
+import { CACHE_TTL, IMAGE_SEARCH } from "@/shared/constants";
 import type { DeepResearchImage } from "@/shared/deep-research-types";
 import type { AppLocale } from "@/shared/person-images";
 
@@ -26,18 +28,10 @@ type SubjectResponse = {
   primarySubject?: string;
 };
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const SUBJECT_CACHE_TTL_MS = 30 * 60 * 1000;
-
 const imageCache = new Map<string, CacheEntry>();
 const subjectCache = new Map<string, SubjectCacheEntry>();
 
 let warnedMissingConfig = false;
-
-function env(name: string): string | undefined {
-  const value = process.env[name];
-  return value?.trim() ? value.trim() : undefined;
-}
 
 function cacheKey(locale: Locale, subject: string): string {
   return `${locale}:${subject.toLowerCase()}`;
@@ -65,7 +59,7 @@ function writeImageCache(
   }
 
   imageCache.set(cacheKey(locale, subject), {
-    expiresAt: Date.now() + CACHE_TTL_MS,
+    expiresAt: Date.now() + CACHE_TTL.SUBJECT_IMAGES,
     images,
   });
 }
@@ -84,7 +78,7 @@ function readSubjectCache(locale: Locale, query: string): string | null {
 function writeSubjectCache(locale: Locale, query: string, subject: string): void {
   subjectCache.set(cacheKey(locale, query), {
     subject,
-    expiresAt: Date.now() + SUBJECT_CACHE_TTL_MS,
+    expiresAt: Date.now() + CACHE_TTL.SUBJECT_NAME,
   });
 }
 
@@ -114,8 +108,8 @@ export async function fetchSubjectImages(
     return cached;
   }
 
-  const apiKey = env("GOOGLE_API_KEY");
-  const cseCx = env("GOOGLE_CSE_CX");
+  const apiKey = getEnv("GOOGLE_API_KEY");
+  const cseCx = getEnv("GOOGLE_CSE_CX");
   if (!apiKey || !cseCx) {
     warnMissingConfig();
     return attemptFallback(subject, normalizedQuery, options);
@@ -126,7 +120,7 @@ export async function fetchSubjectImages(
     cx: cseCx,
     q: subject,
     searchType: "image",
-    num: "9",
+    num: String(IMAGE_SEARCH.MAX_IMAGES),
     safe: "active",
     imgType: "face",
   });
@@ -185,20 +179,18 @@ export async function fetchSubjectImages(
         sourceTitle: extractSourceTitle(item.image?.contextLink),
       });
 
-      if (images.length >= 9) {
+      if (images.length >= IMAGE_SEARCH.MAX_IMAGES) {
         break;
       }
     }
 
     if (images.length === 0) {
-      console.warn(`[fetchSubjectImages] No images found via Google CSE for subject "${subject}", attempting fallback`);
       const fallback = await attemptFallback(subject, normalizedQuery, options);
       if (fallback.length > 0) {
         return fallback;
       }
     }
 
-    console.log(`[fetchSubjectImages] Successfully fetched ${images.length} images for subject "${subject}"`);
     writeImageCache(options.locale, subject, images);
     return images;
   } catch (error) {
@@ -216,20 +208,15 @@ async function attemptFallback(
   originalQuery: string,
   options: FetchSubjectImagesOptions,
 ): Promise<DeepResearchImage[]> {
-  console.log(`[attemptFallback] Attempting fallback for subject "${subject}", original query "${originalQuery}"`);
-
   const first = await fetchFallbackSubjectImages(subject, options.locale, options.signal);
   if (first.length > 0) {
-    console.log(`[attemptFallback] Found ${first.length} images using subject "${subject}"`);
     writeImageCache(options.locale, subject, first);
     return first;
   }
 
   if (subject !== originalQuery) {
-    console.log(`[attemptFallback] Trying with original query "${originalQuery}"`);
     const second = await fetchFallbackSubjectImages(originalQuery, options.locale, options.signal);
     if (second.length > 0) {
-      console.log(`[attemptFallback] Found ${second.length} images using original query "${originalQuery}"`);
       writeImageCache(options.locale, subject, second);
       return second;
     }
@@ -246,9 +233,7 @@ async function fetchFallbackSubjectImages(
   signal: AbortSignal | undefined,
 ): Promise<DeepResearchImage[]> {
   try {
-    console.log(`[fetchFallbackSubjectImages] Fetching Wikimedia images for query "${query}"`);
     const { images } = await fetchPersonImages(query, { locale, signal });
-    console.log(`[fetchFallbackSubjectImages] Received ${images.length} images from Wikimedia for query "${query}"`);
     return images.map((image) => ({
       url: image.fullSizeUrl,
       title: image.title,
@@ -273,7 +258,6 @@ async function resolvePrimarySubject(
 ): Promise<string> {
   const cached = readSubjectCache(locale, query);
   if (cached) {
-    console.log(`[resolvePrimarySubject] Using cached subject "${cached}" for query "${query}"`);
     return cached;
   }
 
@@ -292,7 +276,6 @@ async function resolvePrimarySubject(
       contents: createContent(prompt),
       config: {
         responseMimeType: "application/json",
-        temperature: 0,
         ...(signal ? { abortSignal: signal } : {}),
       },
     });
@@ -300,7 +283,6 @@ async function resolvePrimarySubject(
     const payload = parseSubjectResponse(response.text);
     const candidate = normalizeQuery(payload.primarySubject ?? "");
     const subject = candidate || trimmed;
-    console.log(`[resolvePrimarySubject] Resolved subject "${subject}" for query "${query}"`);
     writeSubjectCache(locale, query, subject);
     return subject;
   } catch (error) {

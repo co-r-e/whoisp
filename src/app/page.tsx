@@ -1,4 +1,4 @@
-import DeepResearchClient from "./_components/deep-research-client";
+import { DeepResearchClient } from "./_components/deep-research-client";
 import { enStrings } from "./_components/deep-research-strings";
 
 export const dynamic = "force-dynamic";

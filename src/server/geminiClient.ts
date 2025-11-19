@@ -1,6 +1,7 @@
 import { GoogleGenAI, type GoogleGenAIOptions } from "@google/genai/node";
+import { getEnv, asBoolean } from "@/shared/utils";
 
-const DEFAULT_MODEL = "gemini-flash-latest";
+const DEFAULT_MODEL = "gemini-3-pro-preview";
 
 type GeminiClientBundle = {
   client: GoogleGenAI;
@@ -11,30 +12,20 @@ type GeminiClientBundle = {
 let cachedBundle: GeminiClientBundle | null = null;
 let cachedKey: string | null = null;
 
-function env(name: string): string | undefined {
-  const value = process.env[name];
-  return value?.trim() ? value.trim() : undefined;
-}
-
-function asBoolean(value: string | undefined): boolean {
-  if (!value) return false;
-  return value.toLowerCase() === "true";
-}
-
 function computeKey(parts: Record<string, string | boolean | undefined>): string {
   return JSON.stringify(parts);
 }
 
 function buildOptions(): { options: GoogleGenAIOptions; model: string; isVertex: boolean; key: string } {
-  const model = env("GEMINI_MODEL") ?? DEFAULT_MODEL;
-  const googleApiKey = env("GOOGLE_API_KEY");
-  const geminiApiKey = env("GEMINI_API_KEY");
+  const model = getEnv("GEMINI_MODEL") ?? DEFAULT_MODEL;
+  const googleApiKey = getEnv("GOOGLE_API_KEY");
+  const geminiApiKey = getEnv("GEMINI_API_KEY");
   const apiKey = googleApiKey ?? geminiApiKey;
 
-  const useVertex = asBoolean(env("GOOGLE_GENAI_USE_VERTEXAI"));
-  const project = env("GOOGLE_CLOUD_PROJECT");
-  const location = env("GOOGLE_CLOUD_LOCATION");
-  const googleCredentialsPath = env("GOOGLE_APPLICATION_CREDENTIALS");
+  const useVertex = asBoolean(getEnv("GOOGLE_GENAI_USE_VERTEXAI"));
+  const project = getEnv("GOOGLE_CLOUD_PROJECT");
+  const location = getEnv("GOOGLE_CLOUD_LOCATION");
+  const googleCredentialsPath = getEnv("GOOGLE_APPLICATION_CREDENTIALS");
 
   if (!apiKey && !useVertex) {
     throw new Error(
@@ -88,5 +79,5 @@ export function getGeminiClient(): GeminiClientBundle {
 }
 
 export function getModel(): string {
-  return env("GEMINI_MODEL") ?? DEFAULT_MODEL;
+  return getEnv("GEMINI_MODEL") ?? DEFAULT_MODEL;
 }

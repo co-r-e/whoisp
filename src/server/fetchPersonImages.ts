@@ -1,12 +1,11 @@
 import { stripHtml } from "./utils/stripHtml";
+import { IMAGE_SEARCH } from "@/shared/constants";
 import type { AppLocale, PersonImage, PersonImageResponse } from "@/shared/person-images";
 
 export type FetchPersonImagesOptions = {
   locale: AppLocale;
   signal?: AbortSignal;
 };
-
-const MAX_IMAGES = 9;
 const WIKIMEDIA_ENDPOINT = "https://commons.wikimedia.org/w/api.php";
 const ACCEPTED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -158,13 +157,13 @@ export async function fetchPersonImages(query: string, { locale, signal }: Fetch
     action: "query",
     format: "json",
     generator: "search",
-    gsrlimit: "20",
+    gsrlimit: String(IMAGE_SEARCH.WIKIMEDIA_SEARCH_LIMIT),
     gsrnamespace: "6",
     gsrprop: "size|wordcount",
     gsrsearch: buildSearchQuery(trimmed, locale),
     prop: "imageinfo",
     iiprop: "url|mime|extmetadata",
-    iiurlwidth: "512",
+    iiurlwidth: String(IMAGE_SEARCH.THUMBNAIL_WIDTH),
     origin: "*",
   });
 
@@ -192,7 +191,6 @@ export async function fetchPersonImages(query: string, { locale, signal }: Fetch
     }
 
     const pages = data.query?.pages ? Object.values(data.query.pages) : [];
-    console.log(`[fetchPersonImages] Received ${pages.length} pages from Wikimedia for query: "${trimmed}"`);
 
     const seen = new Set<string>();
     const images: PersonImage[] = [];
@@ -204,10 +202,9 @@ export async function fetchPersonImages(query: string, { locale, signal }: Fetch
       if (seen.has(key)) continue;
       seen.add(key);
       images.push(image);
-      if (images.length >= MAX_IMAGES) break;
+      if (images.length >= IMAGE_SEARCH.MAX_IMAGES) break;
     }
 
-    console.log(`[fetchPersonImages] Returning ${images.length} images for query: "${trimmed}"`);
     return { images };
   } catch (error) {
     if ((error as DOMException)?.name === "AbortError") {

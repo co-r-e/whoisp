@@ -1,4 +1,6 @@
-export type AppLocale = "en" | "ja";
+import type { Locale } from "./deep-research-types";
+
+export type AppLocale = Locale;
 
 export type PersonImage = {
   id: string;
