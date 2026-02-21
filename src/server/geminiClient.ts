@@ -1,7 +1,7 @@
 import { GoogleGenAI, type GoogleGenAIOptions } from "@google/genai/node";
 import { getEnv, asBoolean } from "@/shared/utils";
 
-const DEFAULT_MODEL = "gemini-3-pro-preview";
+const DEFAULT_MODEL = "gemini-3.1-pro-preview";
 
 type GeminiClientBundle = {
   client: GoogleGenAI;
