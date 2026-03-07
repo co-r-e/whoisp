@@ -36,7 +36,7 @@ npm --version   # v9.0.0 以降であることを確認
 ### 1. リポジトリのクローン
 
 ```bash
-git clone https://github.com/yourusername/whoisp.git
+git clone https://github.com/co-r-e/whoisp.git
 cd whoisp
 ```
 
@@ -130,6 +130,13 @@ GOOGLE_CSE_CX=your_custom_search_engine_id_here
 | `GOOGLE_APPLICATION_CREDENTIALS` | - | サービスアカウントJSONファイルのパス |
 
 ※ `GEMINI_API_KEY` または `GOOGLE_API_KEY` のいずれか一つが必須
+
+### 外部サービスとデータの扱い
+
+- 調査クエリおよびその分解結果は、レポート生成と検索のために Google Gemini API に送信されます
+- 画像検索を有効にした場合、人物名などの検索語は Google Programmable Search Engine と Wikimedia Commons API に送信されることがあります
+- 本アプリケーション自体は調査結果をバックエンドに永続保存しませんが、各外部サービスではそれぞれの利用規約とプライバシーポリシーに基づいて処理されます
+- 機微情報、不要な個人情報、取り扱う権限のないデータは入力しないでください
 
 ## 開発環境での起動
 
@@ -258,9 +265,14 @@ PORT=3001 npm run dev
 **原因**: APIレート制限またはネットワークエラー
 
 **解決方法**:
-- APIキーのクォータを確認
-- しばらく待ってから再試行
-- ブラウザのコンソールでエラーログを確認
+
+- 数分待ってから再試行する
+- `GEMINI_API_KEY` または `GOOGLE_API_KEY` の利用上限を確認する
+- 画像検索が不要な場合は `GOOGLE_CSE_CX` を未設定にしてフォールバック動作を利用する
+
+## ライセンス
+
+このリポジトリは MIT ライセンスで公開されています。詳細は [LICENSE](LICENSE) を参照してください。
 
 ## プロジェクト構成
 

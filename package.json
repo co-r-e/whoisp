@@ -1,7 +1,16 @@
 {
-    "name": "app",
+    "name": "whoisp",
+    "description": "AI-assisted research application powered by Google Gemini",
     "version": "0.1.0",
-    "private": true,
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/co-r-e/whoisp.git"
+    },
+    "bugs": {
+        "url": "https://github.com/co-r-e/whoisp/issues"
+    },
+    "homepage": "https://github.com/co-r-e/whoisp#readme",
     "scripts": {
         "dev": "next dev",
         "build": "next build",

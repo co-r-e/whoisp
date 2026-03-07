@@ -30,6 +30,12 @@ export default function TermsPage() {
           backend database and investigation inputs are not stored once a page is refreshed or closed.
         </p>
         <p>
+          Queries and generated research prompts are sent to Google Gemini to produce plans, evidence summaries,
+          and final reports. If image lookup is enabled, relevant search terms may also be sent to Google
+          Programmable Search Engine and Wikimedia Commons. Those third-party services process requests under
+          their own terms and privacy policies.
+        </p>
+        <p>
           If you need to retain the output, export it to Word or Markdown before leaving the page.
         </p>
       </section>
@@ -46,6 +52,7 @@ export default function TermsPage() {
             <li>Accuracy and completeness are not guaranteed; always verify findings independently.</li>
             <li>Fetched sources may contain errors; aggregated results inherit those inaccuracies and are not warranted as correct.</li>
             <li>Respect privacy and the terms of each source service and use the tool for appropriate purposes.</li>
+            <li>Submitted queries may be relayed to Google Gemini and, when configured, to Google or Wikimedia image services.</li>
             <li>Sessions are temporary. Refreshing or closing the page clears the current results.</li>
           </ul>
         </div>
