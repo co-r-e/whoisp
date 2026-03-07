@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "調査セッション | WhoisP",
+  title: "セッションリダイレクト | WhoisP",
+  robots: {
+    index: false,
+  },
 };
 
 type JaInvestigationPageProps = {

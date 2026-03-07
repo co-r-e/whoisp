@@ -11,12 +11,14 @@ import { fetchSubjectImages } from "./fetchSubjectImages";
 import { getGeminiClient } from "./geminiClient";
 import { TIMEOUT, RETRY } from "@/shared/constants";
 import type {
+  DeepResearchProgressStage,
   DeepResearchImage,
   DeepResearchPlan,
   DeepResearchPlanStep,
   DeepResearchServerEvent,
   Locale,
   SourceReference,
+  StepExecutionStatus,
   StepFinding,
   StepResult,
 } from "@/shared/deep-research-types";
@@ -121,6 +123,7 @@ const FINAL_SYSTEM_PROMPT = `Integrate the vetted findings into a concise report
 const THINKING_CONFIG = { thinkingLevel: ThinkingLevel.HIGH } as const;
 const THINKING_ERROR_PATTERN = /Thinking level is not supported/i;
 const THINKING_UNSUPPORTED_MODELS = new Set<string>();
+const EVIDENCE_CONCURRENCY = 2;
 
 const TODAY = new Date().toISOString().split('T')[0];
 
@@ -220,7 +223,7 @@ function extractJsonObject(raw: string, context: string): string {
   }
 
   // Remove markdown code fences if present
-  let cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
   // Try to find JSON object
   const start = cleaned.indexOf("{");
@@ -315,25 +318,160 @@ async function withTimeout<T>(
   errorMessage: string,
   signal?: AbortSignal,
 ): Promise<T> {
-  // If signal is already aborted, reject immediately
   if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
+    throw new DOMException("Aborted", "AbortError");
   }
 
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      const timeoutId = setTimeout(() => {
-        reject(new Error(errorMessage));
-      }, timeoutMs);
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error(errorMessage));
+    }, timeoutMs);
 
-      // Clean up timeout if signal is aborted
-      signal?.addEventListener('abort', () => {
-        clearTimeout(timeoutId);
-        reject(new DOMException('Aborted', 'AbortError'));
-      });
-    }),
-  ]);
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
+function isAbortError(error: unknown): error is DOMException {
+  return (error as DOMException | undefined)?.name === "AbortError";
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
+
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException("Aborted", "AbortError"));
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function createProgressMessage(
+  locale: Locale,
+  stage: DeepResearchProgressStage,
+  options: {
+    completedSteps?: number;
+    totalSteps?: number;
+    stepTitle?: string;
+  } = {},
+): string {
+  const { completedSteps = 0, totalSteps = 0, stepTitle } = options;
+
+  if (locale === "ja") {
+    switch (stage) {
+      case "images":
+        return "候補画像を取得しています…";
+      case "planning":
+        return "調査計画を作成しています…";
+      case "evidence":
+        if (totalSteps > 0) {
+          if (stepTitle) {
+            return `エビデンスを収集中 (${completedSteps}/${totalSteps} 完了): ${stepTitle}`;
+          }
+          return `エビデンスを収集中 (${completedSteps}/${totalSteps} 完了)…`;
+        }
+        return "エビデンスを収集中…";
+      case "synthesis":
+        return "最終レポートを統合しています…";
+      case "done":
+        return totalSteps > 0
+          ? `調査が完了しました (${completedSteps}/${totalSteps})。必要ならすぐにエクスポートしてください。`
+          : "調査が完了しました。必要ならすぐにエクスポートしてください。";
+      default:
+        return "";
+    }
+  }
+
+  switch (stage) {
+    case "images":
+      return "Fetching likely subject images…";
+    case "planning":
+      return "Building the research plan…";
+    case "evidence":
+      if (totalSteps > 0) {
+        if (stepTitle) {
+          return `Collecting evidence (${completedSteps}/${totalSteps} complete): ${stepTitle}`;
+        }
+        return `Collecting evidence (${completedSteps}/${totalSteps} complete)…`;
+      }
+      return "Collecting evidence…";
+    case "synthesis":
+      return "Synthesizing the final report…";
+    case "done":
+      return totalSteps > 0
+        ? `Research complete (${completedSteps}/${totalSteps}). Export now if you want to keep it.`
+        : "Research complete. Export now if you want to keep it.";
+    default:
+      return "";
+  }
+}
+
+function resolveStepStatus(
+  findings: StepFinding[],
+  uniqueSources: SourceReference[],
+): Extract<StepExecutionStatus, "completed" | "partial"> {
+  if (
+    findings.length === 0 ||
+    uniqueSources.length === 0 ||
+    findings.some((finding) => finding.sources.length === 0)
+  ) {
+    return "partial";
+  }
+
+  return "completed";
+}
+
+function sortStepResults(plan: DeepResearchPlan, results: Array<StepResult | undefined>): StepResult[] {
+  const order = new Map(plan.steps.map((step, index) => [step.id, index]));
+  return results
+    .filter((result): result is StepResult => Boolean(result))
+    .sort((left, right) => (order.get(left.stepId) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.stepId) ?? Number.MAX_SAFE_INTEGER));
 }
 
 export async function runDeepResearch(query: string, options: RunOptions): Promise<void> {
@@ -345,6 +483,14 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
   const { client, model } = getGeminiClient();
   const sourceRegistry = new Map<string, SourceReference>();
   const orderedSources: SourceReference[] = [];
+  let plan: DeepResearchPlan | null = null;
+  const stepResultsByIndex: Array<StepResult | undefined> = [];
+
+  await options.emit({
+    type: "progress",
+    stage: "images",
+    message: createProgressMessage(options.locale, "images"),
+  });
 
   let subjectImages: DeepResearchImage[] = [];
   try {
@@ -381,28 +527,91 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
     return reference;
   };
 
-  let plan: DeepResearchPlan | null = null;
-  let stepResults: StepResult[] = [];
-
   try {
-    plan = await generatePlan(trimmed, options.locale, options.signal, client, model);
-    await options.emit({ type: "plan", plan });
-
-    // Execute steps in parallel for better performance
-    const stepPromises = plan.steps.map(async (step) => {
-      const result = await gatherEvidence(trimmed, step, options.locale, options.signal, client, model, registerSource);
-      await options.emit({ type: "search", step: result });
-      return result;
+    await options.emit({
+      type: "progress",
+      stage: "planning",
+      message: createProgressMessage(options.locale, "planning"),
     });
 
-    const results = await Promise.allSettled(stepPromises);
-    stepResults = results
-      .filter((r): r is PromiseFulfilledResult<StepResult> => r.status === 'fulfilled')
-      .map((r) => r.value);
+    plan = await generatePlan(trimmed, options.locale, options.signal, client, model);
+    const activePlan = plan;
+    await options.emit({ type: "plan", plan: activePlan });
+    const totalSteps = activePlan.steps.length;
+
+    await options.emit({
+      type: "progress",
+      stage: "evidence",
+      message: createProgressMessage(options.locale, "evidence", {
+        completedSteps: 0,
+        totalSteps,
+      }),
+      completedSteps: 0,
+      totalSteps,
+    });
+
+    let nextStepIndex = 0;
+    let completedSteps = 0;
+
+    const worker = async () => {
+      while (true) {
+        throwIfAborted(options.signal);
+
+        const currentIndex = nextStepIndex;
+        nextStepIndex += 1;
+        if (currentIndex >= activePlan.steps.length) {
+          return;
+        }
+
+        const step = activePlan.steps[currentIndex];
+        await options.emit({ type: "step-status", stepId: step.id, status: "running" });
+
+        const result = await gatherEvidence(
+          trimmed,
+          step,
+          options.locale,
+          options.signal,
+          client,
+          model,
+          registerSource,
+        );
+
+        stepResultsByIndex[currentIndex] = result;
+        completedSteps += 1;
+
+        await options.emit({ type: "step-status", stepId: step.id, status: result.status });
+        await options.emit({ type: "search", step: result });
+        await options.emit({
+          type: "progress",
+          stage: "evidence",
+          message: createProgressMessage(options.locale, "evidence", {
+            completedSteps,
+            totalSteps,
+            stepTitle: step.title,
+          }),
+          completedSteps,
+          totalSteps,
+        });
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(EVIDENCE_CONCURRENCY, totalSteps) }, () => worker()),
+    );
+
+    const stepResults = sortStepResults(activePlan, stepResultsByIndex);
+
+    await options.emit({
+      type: "progress",
+      stage: "synthesis",
+      message: createProgressMessage(options.locale, "synthesis"),
+      completedSteps: stepResults.length,
+      totalSteps,
+    });
 
     const finalReport = await synthesizeReport(
       trimmed,
-      plan,
+      activePlan,
       stepResults,
       orderedSources,
       options.locale,
@@ -413,7 +622,9 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
 
     await options.emit({ type: "final", report: finalReport, sources: orderedSources });
   } catch (error) {
-    if ((error as DOMException)?.name === "AbortError") {
+    if (isAbortError(error)) {
+      const stepResults = plan ? sortStepResults(plan, stepResultsByIndex) : [];
+
       // Generate partial report with data collected so far
       if (stepResults.length > 0 && plan) {
         try {
@@ -441,7 +652,7 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
           await options.emit({
             type: "final",
             report: generateFallbackReport(trimmed, stepResults, options.locale),
-            sources: orderedSources
+            sources: orderedSources,
           });
         }
       } else if (plan) {
@@ -449,7 +660,7 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
         await options.emit({
           type: "final",
           report: generatePlanOnlyReport(trimmed, plan, options.locale),
-          sources: orderedSources
+          sources: orderedSources,
         });
       }
     } else {
@@ -460,16 +671,16 @@ export async function runDeepResearch(query: string, options: RunOptions): Promi
 
 function generateFallbackReport(query: string, steps: StepResult[], locale: Locale): string {
   if (locale === "ja") {
-    const findings = steps.map(step => {
-      const findingsText = step.findings.map(f => `- **${f.heading}**: ${f.insight}`).join("\n");
+    const findings = steps.map((step) => {
+      const findingsText = step.findings.map((finding) => `- **${finding.heading}**: ${finding.insight}`).join("\n");
       return `### ${step.title}\n\n${step.summary}\n\n${findingsText}`;
     }).join("\n\n");
 
     return `# ${query}\n\n## 調査結果（部分的）\n\n調査は途中で中止されましたが、以下の情報を収集しました。\n\n${findings}`;
   }
 
-  const findings = steps.map(step => {
-    const findingsText = step.findings.map(f => `- **${f.heading}**: ${f.insight}`).join("\n");
+  const findings = steps.map((step) => {
+    const findingsText = step.findings.map((finding) => `- **${finding.heading}**: ${finding.insight}`).join("\n");
     return `### ${step.title}\n\n${step.summary}\n\n${findingsText}`;
   }).join("\n\n");
 
@@ -549,11 +760,15 @@ async function generatePlan(
         expectedInsights: payload.expectedInsights?.map((line) => line.trim()).filter(Boolean) ?? [],
       };
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Plan generation attempt ${attempt + 1} failed:`, lastError.message);
 
       if (attempt < RETRY.MAX_ATTEMPTS) {
-        await new Promise((resolve) => setTimeout(resolve, RETRY.BASE_DELAY_MS * (attempt + 1)));
+        await delay(RETRY.BASE_DELAY_MS * (attempt + 1), signal);
       }
     }
   }
@@ -643,17 +858,22 @@ async function gatherEvidence(
       return {
         stepId: step.id,
         title: step.title,
+        status: resolveStepStatus(findings, uniqueSources),
         summary: payload.summary?.trim() ?? "",
         queries: candidate?.groundingMetadata?.retrievalQueries ?? [],
         findings,
         sources: uniqueSources,
       };
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Attempt ${attempt + 1} failed for step ${step.id}:`, lastError.message);
 
       if (attempt < RETRY.MAX_ATTEMPTS) {
-        await new Promise((resolve) => setTimeout(resolve, RETRY.BASE_DELAY_MS * (attempt + 1)));
+        await delay(RETRY.BASE_DELAY_MS * (attempt + 1), signal);
       }
     }
   }
@@ -663,10 +883,12 @@ async function gatherEvidence(
   return {
     stepId: step.id,
     title: step.title,
+    status: "failed",
     summary: `Evidence collection failed after ${RETRY.MAX_ATTEMPTS + 1} attempts: ${lastError?.message ?? "Unknown error"}`,
     queries: [],
     findings: [],
     sources: [],
+    errorMessage: lastError?.message ?? "Unknown error",
   };
 }
 
@@ -730,11 +952,15 @@ async function synthesizeReport(
 
       return response.text ?? "";
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Report synthesis attempt ${attempt + 1} failed:`, lastError.message);
 
       if (attempt < RETRY.MAX_ATTEMPTS) {
-        await new Promise((resolve) => setTimeout(resolve, RETRY.BASE_DELAY_MS * (attempt + 1)));
+        await delay(RETRY.BASE_DELAY_MS * (attempt + 1), signal);
       }
     }
   }

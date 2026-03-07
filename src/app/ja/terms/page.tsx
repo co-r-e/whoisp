@@ -23,6 +23,9 @@ export default function TermsJaPage() {
         <p>
           本サービスは予告なく変更または終了する場合があります。専用のバックエンドデータベースは持たず、ページを再読み込みまたは閉じた時点で調査の入力内容は保持されません。
         </p>
+        <p>
+          結果を残したい場合は、ページを離れる前に Word または Markdown で出力してください。
+        </p>
       </section>
       <section id="usage-notes" className="space-y-4 rounded-lg border border-border bg-card p-4">
         <h2 className="text-base font-medium">利用上の注意・免責事項</h2>
@@ -35,6 +38,7 @@ export default function TermsJaPage() {
             <li>取得対象は「公開されている情報」に限られます。非公開領域の取得は行いません。</li>
             <li>検索結果の正確性・完全性を保証するものではありません。最終判断はご自身でご確認ください。</li>
             <li>個人のプライバシーと各サービスの利用規約を尊重し、適切な目的の範囲でご利用ください。</li>
+            <li>セッションは一時的です。ページを再読み込みまたは閉じると現在の結果は保持されません。</li>
           </ul>
         </div>
         <div className="space-y-2">

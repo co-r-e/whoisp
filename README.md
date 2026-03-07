@@ -102,8 +102,8 @@ GEMINI_API_KEY=your_gemini_api_key_here
 # または
 GOOGLE_API_KEY=your_google_cloud_api_key_here
 
-# オプション: 使用するモデルを変更する場合（デフォルト: gemini-3-pro-preview）
-GEMINI_MODEL=gemini-3-pro-preview
+# オプション: 使用するモデルを変更する場合（デフォルト: gemini-3.1-pro-preview）
+GEMINI_MODEL=gemini-3.1-pro-preview
 
 # オプション: 画像検索機能を使用する場合
 GOOGLE_API_KEY=your_google_cloud_api_key_here
@@ -122,7 +122,7 @@ GOOGLE_CSE_CX=your_custom_search_engine_id_here
 |--------|------|------|
 | `GEMINI_API_KEY` | ○※ | Google AI Studio APIキー |
 | `GOOGLE_API_KEY` | ○※ | Google Cloud Gemini APIキー（`GEMINI_API_KEY`より優先） |
-| `GEMINI_MODEL` | - | 使用するGeminiモデル（デフォルト: `gemini-3-pro-preview`） |
+| `GEMINI_MODEL` | - | 使用するGeminiモデル（デフォルト: `gemini-3.1-pro-preview`） |
 | `GOOGLE_CSE_CX` | - | Google Programmable Search Engine ID（画像検索用） |
 | `GOOGLE_GENAI_USE_VERTEXAI` | - | Vertex AI使用時は `true` に設定 |
 | `GOOGLE_CLOUD_PROJECT` | △ | Vertex AI使用時に必要なプロジェトID |
@@ -193,16 +193,18 @@ PORT=8080 npm run start
    - **最終レポート**: 総合的な分析結果
    - **参照元**: 情報源のリスト
 
+### セッションの扱い
+
+- 調査結果はバックエンドに保存されません
+- ページを再読み込みするか閉じると、表示中の結果は保持されません
+- 残したい場合は、ページを離れる前に Word または Markdown で出力してください
+
 ### レポートのエクスポート
 
-調査結果をMicrosoft Word形式でダウンロードできます：
+調査結果は Microsoft Word または Markdown 形式でダウンロードできます：
 
-1. 調査が完了したら、「Wordで出力」（Export to Word）ボタンをクリック
-2. `.docx` ファイルが自動的にダウンロードされます
-
-### 調査履歴
-
-サイドバーから過去の調査結果にアクセスできます。各調査には固有のURLが割り当てられています。
+1. 調査が完了したら、「Wordで出力」または「Markdownで出力」ボタンをクリック
+2. `.docx` または `.md` ファイルが自動的にダウンロードされます
 
 ## トラブルシューティング
 

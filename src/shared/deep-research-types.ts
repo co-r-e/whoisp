@@ -1,5 +1,9 @@
 export type Locale = "en" | "ja";
 
+export type StepExecutionStatus = "pending" | "running" | "completed" | "partial" | "failed" | "cancelled";
+
+export type DeepResearchProgressStage = "idle" | "images" | "planning" | "evidence" | "synthesis" | "done";
+
 export type DeepResearchImage = {
   url: string;
   title?: string;
@@ -43,15 +47,25 @@ export type StepFinding = {
 export type StepResult = {
   stepId: string;
   title: string;
+  status: Extract<StepExecutionStatus, "completed" | "partial" | "failed">;
   summary: string;
   queries: string[];
   findings: StepFinding[];
   sources: SourceReference[];
+  errorMessage?: string;
 };
 
 export type DeepResearchServerEvent =
   | { type: "images"; images: DeepResearchImage[] }
   | { type: "plan"; plan: DeepResearchPlan }
+  | {
+      type: "progress";
+      stage: DeepResearchProgressStage;
+      message: string;
+      completedSteps?: number;
+      totalSteps?: number;
+    }
+  | { type: "step-status"; stepId: string; status: StepExecutionStatus }
   | { type: "search"; step: StepResult }
   | { type: "analysis"; notes: string }
   | { type: "final"; report: string; sources: SourceReference[] };

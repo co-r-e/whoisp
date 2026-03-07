@@ -6,13 +6,15 @@ import remarkGfm from "remark-gfm";
 import { useSearchParams } from "next/navigation";
 import { useResearchRun } from "./research-run-context";
 import type {
-  DeepResearchImage,
   DeepResearchPlan,
+  DeepResearchProgressStage,
   DeepResearchStreamEvent,
   Locale,
   SourceReference,
+  StepExecutionStatus,
   StepResult,
 } from "@/shared/deep-research-types";
+import { exportToMarkdown } from "@/utils/exportToMarkdown";
 import { exportToWord } from "@/utils/exportToWord";
 
 type UiStrings = {
@@ -22,6 +24,14 @@ type UiStrings = {
   stop: string;
   idleStatus: string;
   runningStatus: string;
+  progressHeading: string;
+  progressIdle: string;
+  progressComplete: string;
+  progressCancelled: string;
+  progressCancelledEmpty: string;
+  sessionTitle: string;
+  sessionBody: string;
+  sessionHint: string;
   planHeading: string;
   planExpectation: string;
   planEmpty: string;
@@ -36,6 +46,14 @@ type UiStrings = {
   imagesLoading: string;
   imagesEmpty: string;
   imagesNotFound: string;
+  exportWord: string;
+  exportMarkdown: string;
+  stepStatusPending: string;
+  stepStatusRunning: string;
+  stepStatusCompleted: string;
+  stepStatusPartial: string;
+  stepStatusFailed: string;
+  stepStatusCancelled: string;
 };
 
 type DeepResearchClientProps = {
@@ -55,6 +73,20 @@ const initialState: ResearchState = {
   steps: [],
   report: null,
   sources: [],
+};
+
+type ProgressState = {
+  stage: DeepResearchProgressStage;
+  message: string;
+  completedSteps: number;
+  totalSteps: number;
+};
+
+const initialProgressState: ProgressState = {
+  stage: "idle",
+  message: "",
+  completedSteps: 0,
+  totalSteps: 0,
 };
 
 function cx(...classes: Array<string | undefined>): string {
@@ -127,15 +159,83 @@ const reportMarkdownComponents: Components = {
   },
 };
 
+function getStepStatusLabel(status: StepExecutionStatus, strings: UiStrings): string {
+  switch (status) {
+    case "running":
+      return strings.stepStatusRunning;
+    case "completed":
+      return strings.stepStatusCompleted;
+    case "partial":
+      return strings.stepStatusPartial;
+    case "failed":
+      return strings.stepStatusFailed;
+    case "cancelled":
+      return strings.stepStatusCancelled;
+    default:
+      return strings.stepStatusPending;
+  }
+}
+
+function getStepStatusBadgeClass(status: StepExecutionStatus): string {
+  switch (status) {
+    case "running":
+      return "border-sky-500/30 bg-sky-500/10 text-sky-700";
+    case "completed":
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
+    case "partial":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700";
+    case "failed":
+      return "border-destructive/30 bg-destructive/10 text-destructive";
+    case "cancelled":
+      return "border-slate-400/30 bg-slate-400/10 text-slate-600";
+    default:
+      return "border-border bg-muted/50 text-muted-foreground";
+  }
+}
+
+function getProgressBarClass(stage: DeepResearchProgressStage): string {
+  switch (stage) {
+    case "done":
+      return "bg-emerald-600";
+    case "synthesis":
+      return "bg-primary";
+    case "evidence":
+      return "bg-sky-600";
+    case "planning":
+    case "images":
+      return "bg-amber-500";
+    default:
+      return "bg-muted-foreground/40";
+  }
+}
+
+function markCancelledStatuses(
+  statuses: Record<string, StepExecutionStatus>,
+): Record<string, StepExecutionStatus> {
+  return Object.fromEntries(
+    Object.entries(statuses).map(([stepId, status]) => [
+      stepId,
+      status === "pending" || status === "running" ? "cancelled" : status,
+    ]),
+  );
+}
+
 export function DeepResearchClient({ locale, strings }: DeepResearchClientProps) {
   const [state, setState] = useState(initialState);
+  const [progress, setProgress] = useState(initialProgressState);
+  const [stepStatuses, setStepStatuses] = useState<Record<string, StepExecutionStatus>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastStartedQuery, setLastStartedQuery] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const stateRef = useRef(initialState);
   const searchParams = useSearchParams();
   const { setStatus: setGlobalStatus, setRunningState, setImages, setImagesStatus } = useResearchRun();
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -151,11 +251,33 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
           setImages(event.images);
           setImagesStatus(event.images.length > 0 ? "success" : "empty");
           break;
+        case "progress":
+          setProgress({
+            stage: event.stage,
+            message: event.message,
+            completedSteps: event.completedSteps ?? 0,
+            totalSteps: event.totalSteps ?? 0,
+          });
+          setGlobalStatus(event.message);
+          break;
         case "status":
           setGlobalStatus(event.status === "started" ? strings.runningStatus : event.status);
           break;
         case "plan":
           setState((prev) => ({ ...prev, plan: event.plan }));
+          setStepStatuses(
+            Object.fromEntries(event.plan.steps.map((step) => [step.id, "pending" as const])),
+          );
+          setProgress((prev) => ({
+            ...prev,
+            totalSteps: event.plan.steps.length,
+          }));
+          break;
+        case "step-status":
+          setStepStatuses((prev) => ({
+            ...prev,
+            [event.stepId]: event.status,
+          }));
           break;
         case "search":
           setState((prev) => {
@@ -164,12 +286,22 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
             nextSteps.sort((a, b) => a.stepId.localeCompare(b.stepId));
             return { ...prev, steps: nextSteps };
           });
+          setStepStatuses((prev) => ({
+            ...prev,
+            [event.step.stepId]: event.step.status,
+          }));
           break;
         case "analysis":
           setGlobalStatus(event.notes);
           break;
         case "final":
           setState((prev) => ({ ...prev, report: event.report, sources: event.sources }));
+          setProgress((prev) => ({
+            ...prev,
+            stage: "done",
+            message: strings.progressComplete,
+            completedSteps: prev.totalSteps > 0 ? prev.totalSteps : prev.completedSteps,
+          }));
           setGlobalStatus(strings.idleStatus);
           setIsRunning(false);
           setRunningState(false);
@@ -185,6 +317,8 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
           break;
         case "error":
           setError(event.message);
+          setProgress(initialProgressState);
+          setStepStatuses({});
           setIsRunning(false);
           setRunningState(false);
           abortRef.current = null;
@@ -196,7 +330,15 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
           break;
       }
     },
-    [setGlobalStatus, setImages, setImagesStatus, setRunningState, strings.idleStatus, strings.runningStatus],
+    [
+      setGlobalStatus,
+      setImages,
+      setImagesStatus,
+      setRunningState,
+      strings.idleStatus,
+      strings.progressComplete,
+      strings.runningStatus,
+    ],
   );
 
   const processLine = useCallback(
@@ -249,6 +391,8 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
           throw err;
         }
         setError(toMessage(err));
+        setProgress(initialProgressState);
+        setStepStatuses({});
         setIsRunning(false);
         setRunningState(false);
         setGlobalStatus(strings.idleStatus);
@@ -267,6 +411,13 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
       setGlobalStatus(strings.runningStatus);
       setError(null);
       setState(initialState);
+      setProgress({
+        stage: "images",
+        message: strings.runningStatus,
+        completedSteps: 0,
+        totalSteps: 0,
+      });
+      setStepStatuses({});
       setRunningState(true, handleCancel);
       setImages([]);
       setImagesStatus("loading");
@@ -298,13 +449,27 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
           // Aborted - server will attempt to send partial report if already started
           // The final event handler will update the status if report was received
           // Otherwise, show idle status
+          const latestState = stateRef.current;
+          const hasCollectedResults =
+            latestState.steps.length > 0 || Boolean(latestState.report) || latestState.sources.length > 0;
+          const cancelledMessage = hasCollectedResults ? strings.progressCancelled : strings.progressCancelledEmpty;
+
+          setProgress((prev) => ({
+            stage: "done",
+            message: cancelledMessage,
+            completedSteps: prev.completedSteps,
+            totalSteps: prev.totalSteps || latestState.plan?.steps.length || 0,
+          }));
+          setStepStatuses((prev) => markCancelledStatuses(prev));
           setIsRunning(false);
           setRunningState(false);
-          setGlobalStatus(strings.idleStatus);
+          setGlobalStatus(cancelledMessage);
           abortRef.current = null;
           return;
         }
         setError(toMessage(err));
+        setProgress(initialProgressState);
+        setStepStatuses({});
         setIsRunning(false);
         abortRef.current = null;
         setRunningState(false);
@@ -321,6 +486,8 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
       setImages,
       setImagesStatus,
       setRunningState,
+      strings.progressCancelled,
+      strings.progressCancelledEmpty,
       strings.idleStatus,
       strings.runningStatus,
     ],
@@ -359,6 +526,22 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
   const hasEvidence = orderedSteps.length > 0;
   const hasReport = Boolean(state.report);
   const hasSources = state.sources.length > 0;
+  const hasResearchOutput = hasPlanSteps || hasEvidence || hasReport || hasSources;
+  const progressTotalSteps = progress.totalSteps || planSteps.length;
+  const progressCompletedSteps = progressTotalSteps > 0
+    ? Math.max(
+        progress.completedSteps,
+        Object.values(stepStatuses).filter((status) =>
+          status === "completed" || status === "partial" || status === "failed").length,
+      )
+    : 0;
+  const progressPercent = progressTotalSteps > 0
+    ? Math.min(100, Math.round((progressCompletedSteps / progressTotalSteps) * 100))
+    : progress.stage === "done"
+      ? 100
+      : 0;
+  const progressMessage =
+    progress.message || (isRunning ? strings.runningStatus : hasReport ? strings.progressComplete : strings.progressIdle);
 
   const handleExportToWord = useCallback(async () => {
     const query = searchParams.get("q") ?? "Research";
@@ -373,12 +556,35 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
     });
   }, [locale, orderedSteps, searchParams, state.plan, state.report, state.sources]);
 
+  const handleExportToMarkdown = useCallback(async () => {
+    const query = searchParams.get("q") ?? "Research";
+
+    await exportToMarkdown({
+      query,
+      plan: state.plan,
+      steps: orderedSteps,
+      report: state.report,
+      sources: state.sources,
+      locale,
+    });
+  }, [locale, orderedSteps, searchParams, state.plan, state.report, state.sources]);
+
   const planContent = hasPlanSteps
     ? planSteps.map((step) => (
         <article key={step.id} className="rounded-lg border border-border bg-card p-4">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">
-            <span>{step.id}</span>
-          </div>
+          <header className="flex items-start justify-between gap-3">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">
+              <span>{step.id}</span>
+            </div>
+            <span
+              className={cx(
+                "inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-medium",
+                getStepStatusBadgeClass(stepStatuses[step.id] ?? "pending"),
+              )}
+            >
+              {getStepStatusLabel(stepStatuses[step.id] ?? "pending", strings)}
+            </span>
+          </header>
           {step.angle ? (
             <p className="mt-1 text-xs text-muted-foreground">{step.angle}</p>
           ) : null}
@@ -393,10 +599,32 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
 
   const evidenceContent = hasEvidence
     ? orderedSteps.map((step) => (
-        <article key={step.stepId} className="rounded-lg border border-border bg-card p-4">
-          <header className="flex flex-col gap-1">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">{step.stepId}</span>
-            <h3 className="text-lg font-semibold">{step.title}</h3>
+        <article
+          key={step.stepId}
+          className={cx(
+            "rounded-lg border bg-card p-4",
+            step.status === "failed"
+              ? "border-destructive/30 bg-destructive/5"
+              : step.status === "partial"
+                ? "border-amber-500/30 bg-amber-500/5"
+                : "border-border",
+          )}
+        >
+          <header className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">{step.stepId}</span>
+                <h3 className="text-lg font-semibold">{step.title}</h3>
+              </div>
+              <span
+                className={cx(
+                  "inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-medium",
+                  getStepStatusBadgeClass(step.status),
+                )}
+              >
+                {getStepStatusLabel(step.status, strings)}
+              </span>
+            </div>
             {step.summary ? (
               <p className="text-sm text-foreground">{step.summary}</p>
             ) : null}
@@ -479,12 +707,44 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
         </section>
       ) : null}
 
-      {(hasPlanSteps || hasEvidence || hasReport || hasSources) && (
-        <div className="flex justify-start">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <article className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {strings.progressHeading}
+              </p>
+              <h2 className="text-lg font-semibold text-foreground">{progressMessage}</h2>
+            </div>
+            {progressTotalSteps > 0 ? (
+              <p className="shrink-0 text-sm font-medium text-muted-foreground">
+                {progressCompletedSteps}/{progressTotalSteps}
+              </p>
+            ) : null}
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cx("h-full rounded-full transition-[width] duration-300", getProgressBarClass(progress.stage))}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-border bg-card p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {strings.sessionTitle}
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-foreground">{strings.sessionBody}</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{strings.sessionHint}</p>
+        </article>
+      </section>
+
+      {hasResearchOutput ? (
+        <div className="flex flex-wrap justify-start gap-3">
           <button
             type="button"
             onClick={handleExportToWord}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isRunning}
           >
             <svg
@@ -502,10 +762,34 @@ export function DeepResearchClient({ locale, strings }: DeepResearchClientProps)
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            <span>{locale === "ja" ? "Wordで出力" : "Export to Word"}</span>
+            <span>{strings.exportWord}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportToMarkdown}
+            className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isRunning}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 4h16v16H4z" />
+              <path d="M8 9h8" />
+              <path d="M8 13h5" />
+              <path d="M8 17h8" />
+            </svg>
+            <span>{strings.exportMarkdown}</span>
           </button>
         </div>
-      )}
+      ) : null}
 
       <div className="w-full overflow-x-auto">
         <div className="flex gap-6 min-w-[1280px] pb-4">

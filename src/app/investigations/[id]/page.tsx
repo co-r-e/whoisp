@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "Investigation | WhoisP",
+  title: "Session Redirect | WhoisP",
+  robots: {
+    index: false,
+  },
 };
 
 type InvestigationPageProps = {

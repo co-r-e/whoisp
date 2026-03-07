@@ -50,7 +50,7 @@ export function ResearchRunProvider({ children }: { children: React.ReactNode })
     () => ({
       status,
       isRunning,
-      cancel: cancelRef.current ? cancel : null,
+      cancel: isRunning ? cancel : null,
       setStatus,
       setRunningState,
       images,
